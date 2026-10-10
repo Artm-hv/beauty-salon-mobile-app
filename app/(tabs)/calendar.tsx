@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
+  PanResponder,
 } from 'react-native';
 import {
   Text,
@@ -13,6 +14,7 @@ import {
   Portal,
   Dialog,
   Button,
+  Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
@@ -56,9 +58,11 @@ export default function CalendarScreen() {
   // Діалог деталей візиту
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
 
+  // Сповіщення про жест/акселерометр
+  const [gestureFeedback, setGestureFeedback] = useState<string | null>(null);
+
   // Поточний час для динамічної червоної лінії
   const [currentMinutesFromStart, setCurrentMinutesFromStart] = useState<number>(() => {
-    // Якщо зараз реальний час між 10:00 і 21:00 - беремо реальний, інакше демо-час 20:01 як на скріншоті
     const now = new Date();
     const h = now.getHours();
     const m = now.getMinutes();
@@ -81,15 +85,53 @@ export default function CalendarScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Сенсор 2: Акселерометр - перемикання дня струшуванням
+  // Функції перемикання дати
+  const goToNextDay = (source: string = 'Жест') => {
+    setSelectedDayIndex((prev) => {
+      if (prev < DAYS_LIST.length - 1) {
+        const next = prev + 1;
+        setGestureFeedback(`📅 ${DAYS_LIST[next].dayName}, ${DAYS_LIST[next].dayNum} жовт (${source})`);
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  const goToPrevDay = (source: string = 'Жест') => {
+    setSelectedDayIndex((prev) => {
+      if (prev > 0) {
+        const next = prev - 1;
+        setGestureFeedback(`📅 ${DAYS_LIST[next].dayName}, ${DAYS_LIST[next].dayNum} жовт (${source})`);
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  // Сенсор 2: Акселерометр - плавний нахил/рух телефону вліво-вправо
   useAccelerometer({
-    onShakeRight: () => {
-      setSelectedDayIndex((prev) => Math.min(prev + 1, DAYS_LIST.length - 1));
-    },
-    onShakeLeft: () => {
-      setSelectedDayIndex((prev) => Math.max(prev - 1, 0));
-    },
+    onShakeRight: () => goToNextDay('Акселерометр →'),
+    onShakeLeft: () => goToPrevDay('← Акселерометр'),
   });
+
+  // Свайп-жести по екрану (PanResponder)
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          // Реагуємо на горизонтальний свайп сильніший за вертикальний
+          return Math.abs(gestureState.dx) > 35 && Math.abs(gestureState.dy) < 30;
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (gestureState.dx > 45) {
+            goToPrevDay('Свайп праворуч');
+          } else if (gestureState.dx < -45) {
+            goToNextDay('Свайп ліворуч');
+          }
+        },
+      }),
+    []
+  );
 
   // Переведення часу HH:mm у пікселі для точного розміщення картки
   const calculateCardPosition = (startTime: string, endTime: string) => {
@@ -118,14 +160,46 @@ export default function CalendarScreen() {
 
   return (
     <View style={styles.rootContainer}>
-      {/* 1. ВЕРХНЯ ШАПКА: Заголовок дати + Перемикачі режимів */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.dateDropdownButton} activeOpacity={0.8}>
-          <Text style={styles.dateDropdownText}>
-            {currentSelectedDay.dayNum} жовтня
-          </Text>
-          <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+      {/* 1. ВЕРХНЯ ШАПКА: Заголовок дати + Стрілочки навігації + Перемикачі режимів */}
+      <View style={styles.headerRow} {...panResponder.panHandlers}>
+        <View style={styles.dateNavGroup}>
+          <TouchableOpacity
+            style={styles.dateNavArrow}
+            onPress={() => goToPrevDay('Стрілка')}
+            disabled={selectedDayIndex === 0}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={24}
+              color={selectedDayIndex === 0 ? '#444448' : '#FFFFFF'}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.dateDropdownButton}
+            activeOpacity={0.8}
+            onPress={() => setGestureFeedback('Підказка: свайпніть або злегка нахиліть телефон вліво/вправо')}
+          >
+            <Text style={styles.dateDropdownText}>
+              {currentSelectedDay.dayNum} жовтня
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.dateNavArrow}
+            onPress={() => goToNextDay('Стрілка')}
+            disabled={selectedDayIndex === DAYS_LIST.length - 1}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color={selectedDayIndex === DAYS_LIST.length - 1 ? '#444448' : '#FFFFFF'}
+            />
+          </TouchableOpacity>
+        </View>
 
         {/* Кнопки режимів (Сітка, Список, Фільтр) */}
         <View style={styles.modeButtonGroup}>
@@ -260,7 +334,7 @@ export default function CalendarScreen() {
       </ScrollView>
 
       {/* 4. НИЖНЯ ПЛАВАЮЧА ПАНЕЛЬ ВИБОРУ ДНЯ (Жовт Сб, 10 | Нд, 11...) */}
-      <View style={styles.bottomDateDock}>
+      <View style={styles.bottomDateDock} {...panResponder.panHandlers}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomDateScroll}>
           {DAYS_LIST.map((item, index) => {
             const isActive = selectedDayIndex === index;
@@ -328,6 +402,16 @@ export default function CalendarScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Сповіщення зворотного зв'язку жестів / акселерометра */}
+      <Snackbar
+        visible={!!gestureFeedback}
+        onDismiss={() => setGestureFeedback(null)}
+        duration={1500}
+        style={styles.gestureSnackbar}
+      >
+        <Text style={styles.gestureSnackbarText}>{gestureFeedback}</Text>
+      </Snackbar>
     </View>
   );
 }
@@ -346,6 +430,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#000000',
+  },
+  dateNavGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  dateNavArrow: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   dateDropdownButton: {
     flexDirection: 'row',
@@ -606,5 +700,16 @@ const styles = StyleSheet.create({
   dialogBold: {
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  gestureSnackbar: {
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    marginBottom: 75,
+  },
+  gestureSnackbarText: {
+    color: '#38BDF8',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
   },
 });

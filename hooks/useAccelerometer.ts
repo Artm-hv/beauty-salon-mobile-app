@@ -1,28 +1,28 @@
 import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 
 interface UseAccelerometerProps {
-  onShakeRight?: () => void; // Рух праворуч -> +1 день
-  onShakeLeft?: () => void;  // Рух ліворуч -> -1 день
-  threshold?: number;        // Поріг чутливості (за замовчуванням 1.75g)
-  cooldownMs?: number;       // Захисний інтервал між спрацьовуваннями (1000мс)
+  onShakeRight?: () => void; // Рух / нахил праворуч -> наступний день
+  onShakeLeft?: () => void;  // Рух / нахил ліворуч -> попередній день
+  threshold?: number;        // Поріг чутливості (0.85g для плавного жесту без конфлікту з Dev Menu)
+  cooldownMs?: number;       // Захисний інтервал між спрацьовуваннями (700мс)
   enabled?: boolean;
 }
 
 /**
  * Хук для роботи з сенсором Акселерометра (expo-sensors)
- * Сенсор 2: Відстеження різкого струсу телефону для зміни дати
+ * Сенсор 2: Відстеження горизонтального нахилу/фліку телефону вліво-вправо для зміни дати
  * Зона відповідальності: Розробник 1 (Ігор)
  */
 export function useAccelerometer({
   onShakeRight,
   onShakeLeft,
-  threshold = 1.75,
-  cooldownMs = 1000,
+  threshold = 0.85,
+  cooldownMs = 700,
   enabled = true,
 }: UseAccelerometerProps) {
   const lastTriggerTime = useRef<number>(0);
+  const prevX = useRef<number>(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -32,18 +32,21 @@ export function useAccelerometer({
 
     const subscription = Accelerometer.addListener(({ x }) => {
       const now = Date.now();
-      // Перевірка cooldown, щоб уникнути багаторазового перемикання від одного струсу
       if (now - lastTriggerTime.current < cooldownMs) {
+        prevX.current = x;
         return;
       }
 
-      // Струс праворуч (різке прискорення по осі X > порогу)
-      if (x > threshold && onShakeRight) {
+      const deltaX = x - prevX.current;
+      prevX.current = x;
+
+      // Рух або плавний нахил праворуч (x > threshold або сплеск deltaX > 0.7)
+      if ((x > threshold || deltaX > 0.7) && onShakeRight) {
         lastTriggerTime.current = now;
         onShakeRight();
       }
-      // Струс ліворуч (різке прискорення по осі X < -порогу)
-      else if (x < -threshold && onShakeLeft) {
+      // Рух або плавний нахил ліворуч (x < -threshold або сплеск deltaX < -0.7)
+      else if ((x < -threshold || deltaX < -0.7) && onShakeLeft) {
         lastTriggerTime.current = now;
         onShakeLeft();
       }
