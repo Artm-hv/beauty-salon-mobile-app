@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, Surface } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { OrderItem } from '../services/mockData';
-import { Colors } from '../constants/colors';
 
 interface OrderCardProps {
   order: OrderItem;
@@ -11,170 +10,189 @@ interface OrderCardProps {
 }
 
 /**
- * Картка чека/замовлення для екрану Каси
+ * Картка замовлення/чека за точним макетом EasyWeek
  * Зона відповідальності: Розробник 2 (Артем Г)
  */
 export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
-  // Визначення кольорів та тексту статусу
+  // Форматування суми
+  const formatMoney = (val: number) => {
+    const parts = val.toFixed(2).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return `${integerPart},${parts[1]} ₴`;
+  };
+
   const getStatusBadge = () => {
     switch (order.status) {
       case 'COMPLETED':
-        return { text: 'Завершено', bg: '#133E1D', color: '#34D399' };
+        return {
+          icon: 'check',
+          text: 'Завершено',
+          bg: '#0E3D1E',
+          color: '#4CAF50',
+        };
       case 'UNPAID':
-        return { text: 'Не сплачено', bg: '#452B07', color: '#FBBF24' };
+        return {
+          icon: 'alert-circle-outline',
+          text: 'Не сплачено',
+          bg: '#3B2A08',
+          color: '#F59E0B',
+        };
       case 'CANCELLED':
-        return { text: 'Скасовано', bg: '#450A0A', color: '#F87171' };
+        return {
+          icon: 'close',
+          text: 'Скасовано',
+          bg: '#3B1212',
+          color: '#EF4444',
+        };
       default:
-        return { text: 'В обробці', bg: '#2C2C2E', color: '#D1D5DB' };
+        return {
+          icon: 'clock-outline',
+          text: 'В обробці',
+          bg: '#242428',
+          color: '#A1A1AA',
+        };
     }
   };
 
   const badge = getStatusBadge();
 
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={onPress} style={styles.container}>
-      <Surface style={styles.card} elevation={1}>
-        {/* 1. Верхній рядок: Номер чека + Статус */}
-        <View style={styles.topRow}>
-          <View style={styles.numberRow}>
-            <MaterialCommunityIcons name="receipt" size={18} color="#C68A2C" />
-            <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-            <Text style={[styles.statusBadgeText, { color: badge.color }]}>{badge.text}</Text>
+    <TouchableOpacity activeOpacity={0.88} onPress={onPress} style={styles.card}>
+      {/* 1. Верхній рядок: Номер замовлення + Стрілочка */}
+      <View style={styles.headerRow}>
+        <Text style={styles.orderTitle}>Замовлення {order.orderNumber}</Text>
+        <MaterialCommunityIcons name="chevron-right" size={24} color="#8E8E93" />
+      </View>
+
+      {/* 2. Бейдж статусу (наприклад, ✓ Завершено) */}
+      <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+        <MaterialCommunityIcons name={badge.icon as any} size={14} color={badge.color} />
+        <Text style={[styles.statusText, { color: badge.color }]}>{badge.text}</Text>
+      </View>
+
+      {/* Розділювач */}
+      <View style={styles.divider} />
+
+      {/* 3. Деталі (Створено, Клієнт, Касир, Кількість, Всього) */}
+      <View style={styles.detailsList}>
+        {/* Створено */}
+        <View style={styles.detailRow}>
+          <Text style={styles.labelCol}>Створено</Text>
+          <Text style={styles.valueCol}>{order.date}</Text>
+        </View>
+
+        {/* Клієнт */}
+        <View style={styles.detailRow}>
+          <Text style={styles.labelCol}>Клієнт</Text>
+          <View style={styles.personBox}>
+            <View style={[styles.avatarDot, { backgroundColor: '#8B5CF6' }]}>
+              <MaterialCommunityIcons name="account" size={11} color="#FFFFFF" />
+            </View>
+            <Text style={styles.personName}>{order.clientName}</Text>
           </View>
         </View>
 
-        {/* 2. Дані клієнта */}
-        <View style={styles.infoRow}>
-          <MaterialCommunityIcons name="account" size={15} color="#8E8E93" />
-          <Text style={styles.clientName}>{order.clientName}</Text>
-          <Text style={styles.clientPhone}>({order.clientPhone})</Text>
-        </View>
-
-        {/* 3. Послуги та кількість позицій */}
-        <View style={styles.servicesRow}>
-          <MaterialCommunityIcons name="tag-outline" size={14} color="#8E8E93" />
-          <Text numberOfLines={1} style={styles.servicesText}>
-            {order.services.join(', ')}
-          </Text>
-        </View>
-
-        {/* 4. Розділювач */}
-        <View style={styles.divider} />
-
-        {/* 5. Нижня лінія: Дата і касир зліва, Сума великим шрифтом справа */}
-        <View style={styles.bottomRow}>
-          <View>
-            <Text style={styles.dateText}>{order.date}</Text>
-            <Text style={styles.cashierText}>Касир: {order.cashierName}</Text>
-          </View>
-          <View style={styles.amountBox}>
-            <Text style={styles.totalAmount}>{order.totalAmount.toFixed(2)} ₴</Text>
-            <Text style={styles.paymentMethod}>
-              {order.paymentMethod === 'CARD' ? '💳 Картка' : '💵 Готівка'}
-            </Text>
+        {/* Касир */}
+        <View style={styles.detailRow}>
+          <Text style={styles.labelCol}>Касир</Text>
+          <View style={styles.personBox}>
+            <View style={[styles.avatarDot, { backgroundColor: '#84CC16' }]}>
+              <MaterialCommunityIcons name="account" size={11} color="#FFFFFF" />
+            </View>
+            <Text style={styles.personName}>{order.cashierName}</Text>
           </View>
         </View>
-      </Surface>
+
+        {/* Кількість */}
+        <View style={styles.detailRow}>
+          <Text style={styles.labelCol}>Кількість</Text>
+          <Text style={styles.valueCol}>{order.itemsCount}</Text>
+        </View>
+
+        {/* Всього */}
+        <View style={styles.detailRow}>
+          <Text style={styles.labelCol}>Всього</Text>
+          <Text style={styles.totalAmountText}>{formatMoney(order.totalAmount)}</Text>
+        </View>
+      </View>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: 16,
-    marginVertical: 6,
-  },
   card: {
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#121212',
-    borderWidth: 1,
-    borderColor: '#242426',
+    backgroundColor: '#1C1C20',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
   },
-  topRow: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  numberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  orderNumber: {
+  orderTitle: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 6,
   },
-  statusBadgeText: {
-    fontSize: 11,
+  statusText: {
+    fontSize: 12,
     fontWeight: '700',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  clientName: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  clientPhone: {
-    color: '#8E8E93',
-    fontSize: 12,
-  },
-  servicesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  servicesText: {
-    color: '#8E8E93',
-    fontSize: 12,
-    flex: 1,
   },
   divider: {
     height: 1,
-    backgroundColor: '#1E1E1E',
-    marginVertical: 6,
+    backgroundColor: '#28282D',
+    marginVertical: 12,
   },
-  bottomRow: {
+  detailsList: {
+    gap: 10,
+  },
+  detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
-  dateText: {
+  labelCol: {
     color: '#8E8E93',
-    fontSize: 11,
+    fontSize: 13.5,
   },
-  cashierText: {
-    color: '#636366',
-    fontSize: 10,
-    marginTop: 2,
+  valueCol: {
+    color: '#E5E5EA',
+    fontSize: 13.5,
+    fontWeight: '500',
   },
-  amountBox: {
-    alignItems: 'flex-end',
+  personBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  totalAmount: {
+  avatarDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personName: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  totalAmountText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '800',
-  },
-  paymentMethod: {
-    color: '#8E8E93',
-    fontSize: 10,
-    marginTop: 2,
   },
 });

@@ -1,252 +1,232 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import {
-  Text,
-  Searchbar,
-  SegmentedButtons,
-  FAB,
-  Portal,
-  Dialog,
-  Button,
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   TextInput,
-} from 'react-native-paper';
+  Alert,
+} from 'react-native';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { OrderCard } from '../../components/OrderCard';
 import { MOCK_ORDERS, OrderItem } from '../../services/mockData';
-import { Colors } from '../../constants/colors';
+
+type OrderStatusTab = 'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED';
 
 /**
- * Екран 4: Каса та замовлення (CashierScreen)
+ * Екран 4: Замовлення (Каса) за точним скріншотом EasyWeek
  * Зона відповідальності: Розробник 2 (Артем Г)
  */
 export default function CashierScreen() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<OrderStatusTab>('ALL');
+  const [dateRange, setDateRange] = useState('10 вер 2026 р. - 11 жовт 2026 р.');
+  const [selectedExecutor, setSelectedExecutor] = useState('Всі виконавці');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED'>('ALL');
   const [ordersList, setOrdersList] = useState<OrderItem[]>(MOCK_ORDERS);
 
-  // Діалог деталей чека
-  const [selectedOrder, setSelectedOrder] = useState<OrderItem | null>(null);
-
-  // Діалог створення швидкого чека (через FAB)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newClientName, setNewClientName] = useState('');
-  const [newServiceName, setNewServiceName] = useState('');
-  const [newAmount, setNewAmount] = useState('');
-
-  // Фільтрація замовлень за пошуком і табами статусів
+  // Фільтрація замовлень
   const filteredOrders = useMemo(() => {
     return ordersList.filter((ord) => {
-      // Фільтр статусу
-      if (statusFilter !== 'ALL' && ord.status !== statusFilter) {
-        return false;
-      }
-      // Фільтр пошуку (номер чека або клієнт)
+      // Фільтр за табами
+      if (activeTab === 'UNPAID' && ord.status !== 'UNPAID') return false;
+      if (activeTab === 'COMPLETED' && ord.status !== 'COMPLETED') return false;
+      if (activeTab === 'CANCELLED' && ord.status !== 'CANCELLED') return false;
+
+      // Пошук за номером, клієнтом або послугою
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchNumber = ord.orderNumber.toLowerCase().includes(q);
         const matchClient = ord.clientName.toLowerCase().includes(q);
-        return matchNumber || matchClient;
+        const matchService = ord.services.some((s) => s.toLowerCase().includes(q));
+        return matchNumber || matchClient || matchService;
       }
       return true;
     });
-  }, [ordersList, statusFilter, searchQuery]);
+  }, [ordersList, activeTab, searchQuery]);
 
-  // Підрахунок виручки за видимими чеками
-  const totalRevenue = useMemo(() => {
-    return filteredOrders
-      .filter((o) => o.status === 'COMPLETED')
-      .reduce((sum, o) => sum + o.totalAmount, 0);
-  }, [filteredOrders]);
+  const handleOrderPress = (order: OrderItem) => {
+    Alert.alert(
+      `Замовлення ${order.orderNumber}`,
+      `Статус: ${order.status}\nКлієнт: ${order.clientName}\nКасир: ${order.cashierName}\nСума: ${order.totalAmount} ₴\nПослуги:\n• ${order.services.join('\n• ')}`,
+      [
+        { text: 'Друк чека', onPress: () => Alert.alert('Чек', 'Чек надіслано на друк') },
+        { text: 'Закрити', style: 'cancel' },
+      ]
+    );
+  };
 
-  // Створення нового чека
+  const handleDateFilterPress = () => {
+    Alert.alert('Період замовлень', 'Оберіть часовий проміжок для перегляду оплат', [
+      { text: 'Сьогодні', onPress: () => setDateRange('10 жовт 2026 р.') },
+      { text: 'Останній місяць', onPress: () => setDateRange('10 вер 2026 р. - 11 жовт 2026 р.') },
+      { text: 'Скасувати', style: 'cancel' },
+    ]);
+  };
+
+  const handleExecutorFilterPress = () => {
+    Alert.alert('Виконавець', 'Фільтрувати чеки за майстром', [
+      { text: 'Всі виконавці', onPress: () => setSelectedExecutor('Всі виконавці') },
+      { text: 'Юлія Півень', onPress: () => setSelectedExecutor('Юлія Півень') },
+      { text: 'Таня Майстер', onPress: () => setSelectedExecutor('Таня Майстер') },
+      { text: 'Скасувати', style: 'cancel' },
+    ]);
+  };
+
   const handleCreateOrder = () => {
-    if (!newClientName || !newAmount) return;
-
-    const newOrder: OrderItem = {
-      id: `ord-${Date.now()}`,
-      orderNumber: `№${Math.floor(8140 + Math.random() * 50)}`,
-      status: 'COMPLETED',
-      date: '10 жовт 2026, щойно',
-      clientName: newClientName,
-      clientPhone: '+380670000000',
-      cashierName: 'Анастасія (Адмін)',
-      itemsCount: 1,
-      services: [newServiceName || 'Послуга салону'],
-      totalAmount: parseFloat(newAmount) || 500,
-      paymentMethod: 'CARD',
-    };
-
-    setOrdersList([newOrder, ...ordersList]);
-    setIsCreateDialogOpen(false);
-    setNewClientName('');
-    setNewServiceName('');
-    setNewAmount('');
+    Alert.alert(
+      'Нове замовлення',
+      'Бажаєте створити нове замовлення на касі чи перейти до бронювання?',
+      [
+        { text: 'Нове бронювання', onPress: () => router.push('/(tabs)/new-booking') },
+        {
+          text: 'Швидкий чек (700 ₴)',
+          onPress: () => {
+            const newOrd: OrderItem = {
+              id: `ord-${Date.now()}`,
+              orderNumber: `№${Math.floor(8143 + Math.random() * 20)}`,
+              status: 'COMPLETED',
+              date: '10 жовт 2026 р. 20:35',
+              clientName: 'ольга',
+              clientPhone: '+380 67 278 8818',
+              cashierName: 'Настя Кобзар',
+              itemsCount: 1,
+              services: ['Комплексний манікюр + покриття'],
+              totalAmount: 700.0,
+              paymentMethod: 'CARD',
+            };
+            setOrdersList([newOrd, ...ordersList]);
+          },
+        },
+        { text: 'Скасувати', style: 'cancel' },
+      ]
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* 1. Верхня шапка */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Каса та замовлення</Text>
-        <Text style={styles.subtitle}>Реєстр оплат, чеків та транзакцій салону</Text>
+      {/* 1. Верхня плашка: кнопка повернення назад */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.backButton}
+          activeOpacity={0.7}
+          onPress={() => router.push('/(tabs)/calendar')}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* 2. Пошук за чеком або клієнтом */}
-      <View style={styles.searchContainer}>
-        <Searchbar
-          placeholder="Пошук за № чека або клієнтом..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          inputStyle={styles.searchInput}
-          iconColor="#8E8E93"
-          placeholderTextColor="#636366"
-        />
+      {/* 2. Заголовок "Замовлення" */}
+      <Text style={styles.screenTitle}>Замовлення</Text>
+
+      {/* 3. Сегментований перемикач статусів (Всі, Не сплачено, Завершено, Скасовано) */}
+      <View style={styles.segmentContainer}>
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'ALL' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('ALL')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'ALL' && styles.segmentTextActive]}>
+            Всі
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'UNPAID' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('UNPAID')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'UNPAID' && styles.segmentTextActive]}>
+            Не сплачено
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'COMPLETED' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('COMPLETED')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'COMPLETED' && styles.segmentTextActive]}>
+            Завершено
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'CANCELLED' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('CANCELLED')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'CANCELLED' && styles.segmentTextActive]}>
+            Скасовано
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 3. Таби статусів */}
-      <View style={styles.tabsContainer}>
-        <SegmentedButtons
-          value={statusFilter}
-          onValueChange={(val) => setStatusFilter(val as any)}
-          buttons={[
-            { value: 'ALL', label: 'Всі' },
-            { value: 'COMPLETED', label: 'Завершено' },
-            { value: 'UNPAID', label: 'Не сплачено' },
-            { value: 'CANCELLED', label: 'Скасовано' },
-          ]}
-          style={styles.segmentedButtons}
-          density="small"
-        />
+      {/* 4. Фільтр дат (10 вер 2026 р. - 11 жовт 2026 р. ▾) */}
+      <View style={styles.filterPillWrapper}>
+        <TouchableOpacity
+          style={styles.filterPill}
+          activeOpacity={0.75}
+          onPress={handleDateFilterPress}
+        >
+          <Text style={styles.filterPillText}>{dateRange}</Text>
+          <MaterialCommunityIcons name="menu-down" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* 4. Плашка виручки */}
-      <View style={styles.summaryBar}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Замовлень:</Text>
-          <Text style={styles.summaryValue}>{filteredOrders.length}</Text>
+      {/* 5. Фільтр виконавця (Виконавець ▾) */}
+      <View style={styles.filterPillWrapper}>
+        <TouchableOpacity
+          style={styles.filterPill}
+          activeOpacity={0.75}
+          onPress={handleExecutorFilterPress}
+        >
+          <Text style={styles.filterPillText}>
+            {selectedExecutor === 'Всі виконавці' ? 'Виконавець' : selectedExecutor}
+          </Text>
+          <MaterialCommunityIcons name="menu-down" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 6. Пошук */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <TextInput
+            placeholder="Пошук"
+            placeholderTextColor="#8E8E93"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+          <MaterialCommunityIcons name="magnify" size={22} color="#8E8E93" />
         </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Оплачено:</Text>
-          <Text style={styles.revenueHighlight}>{totalRevenue.toFixed(2)} ₴</Text>
-        </View>
       </View>
 
-      {/* 5. Список замовлень */}
-      <ScrollView contentContainerStyle={styles.listContent}>
-        {filteredOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="file-search-outline" size={48} color="#636366" />
-            <Text style={styles.emptyText}>Немає замовлень за заданими фільтрами</Text>
-          </View>
-        ) : (
-          filteredOrders.map((item) => (
-            <OrderCard
-              key={item.id}
-              order={item}
-              onPress={() => setSelectedOrder(item)}
-            />
-          ))
-        )}
+      {/* 7. Список карток замовлень */}
+      <ScrollView
+        contentContainerStyle={styles.scrollList}
+        showsVerticalScrollIndicator={false}
+      >
+        {filteredOrders.map((ord) => (
+          <OrderCard
+            key={ord.id}
+            order={ord}
+            onPress={() => handleOrderPress(ord)}
+          />
+        ))}
       </ScrollView>
 
-      {/* 6. Кнопка швидкого створення чека (FAB) */}
-      <FAB
-        icon="plus"
-        label="Новий чек"
-        style={styles.fab}
-        color="#000000"
-        onPress={() => setIsCreateDialogOpen(true)}
-      />
-
-      {/* Діалог перегляду деталей чека */}
-      <Portal>
-        <Dialog
-          visible={!!selectedOrder}
-          onDismiss={() => setSelectedOrder(null)}
-          style={styles.dialog}
-        >
-          <Dialog.Title style={styles.dialogTitle}>
-            Деталі чека {selectedOrder?.orderNumber}
-          </Dialog.Title>
-          <Dialog.Content>
-            {selectedOrder && (
-              <View style={styles.dialogBody}>
-                <Text style={styles.dialogLine}>
-                  👤 <Text style={styles.dialogBold}>Клієнт:</Text> {selectedOrder.clientName}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  📞 <Text style={styles.dialogBold}>Телефон:</Text> {selectedOrder.clientPhone}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  ✂ <Text style={styles.dialogBold}>Послуги:</Text> {selectedOrder.services.join(', ')}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  🕒 <Text style={styles.dialogBold}>Дата:</Text> {selectedOrder.date}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  💳 <Text style={styles.dialogBold}>Оплата:</Text>{' '}
-                  {selectedOrder.paymentMethod === 'CARD' ? 'Банківська картка' : 'Готівка'}
-                </Text>
-                <Text style={[styles.dialogLine, styles.amountLine]}>
-                  Сума: {selectedOrder.totalAmount.toFixed(2)} ₴
-                </Text>
-              </View>
-            )}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button textColor="#C68A2C" onPress={() => setSelectedOrder(null)}>
-              Закрити
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Діалог створення нового чека */}
-      <Portal>
-        <Dialog
-          visible={isCreateDialogOpen}
-          onDismiss={() => setIsCreateDialogOpen(false)}
-          style={styles.dialog}
-        >
-          <Dialog.Title style={styles.dialogTitle}>Створення нового чека</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Ім'я клієнта"
-              value={newClientName}
-              onChangeText={setNewClientName}
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-            <TextInput
-              label="Назва послуги"
-              value={newServiceName}
-              onChangeText={setNewServiceName}
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-            <TextInput
-              label="Сума (₴)"
-              value={newAmount}
-              onChangeText={setNewAmount}
-              keyboardType="numeric"
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button textColor="#8E8E93" onPress={() => setIsCreateDialogOpen(false)}>
-              Скасувати
-            </Button>
-            <Button textColor="#C68A2C" onPress={handleCreateOrder}>
-              Зберегти чек
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      {/* 8. Плаваюча кнопка "🛒 Нове замовлення" (FAB) */}
+      <TouchableOpacity
+        style={styles.fabButton}
+        activeOpacity={0.85}
+        onPress={handleCreateOrder}
+      >
+        <MaterialCommunityIcons name="cart-outline" size={20} color="#FFFFFF" />
+        <Text style={styles.fabText}>Нове замовлення</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -255,123 +235,120 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    paddingTop: 45,
+    paddingTop: 44,
   },
-  header: {
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  title: {
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#1F1F23',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  screenTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  searchContainer: {
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 14,
   },
-  searchbar: {
-    backgroundColor: '#121212',
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1E1E22',
     borderRadius: 12,
+    marginHorizontal: 16,
+    padding: 3,
+    height: 42,
+  },
+  segmentTab: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 9,
+  },
+  segmentTabActive: {
+    backgroundColor: '#34343A',
+  },
+  segmentText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  filterPillWrapper: {
+    paddingHorizontal: 16,
+    marginTop: 10,
+    alignItems: 'flex-start',
+  },
+  filterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141416',
     borderWidth: 1,
-    borderColor: '#242426',
+    borderColor: '#28282C',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 6,
+  },
+  filterPillText: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  searchRow: {
+    paddingHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141416',
+    borderWidth: 1,
+    borderColor: '#28282C',
+    borderRadius: 10,
     height: 44,
+    paddingHorizontal: 14,
   },
   searchInput: {
+    flex: 1,
     color: '#FFFFFF',
-    fontSize: 13,
-  },
-  tabsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  segmentedButtons: {
-    backgroundColor: '#121212',
-  },
-  summaryBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    marginHorizontal: 16,
-    backgroundColor: '#161616',
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#242426',
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  summaryLabel: {
-    color: '#8E8E93',
-    fontSize: 12,
-  },
-  summaryValue: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  revenueHighlight: {
-    color: '#34D399',
     fontSize: 14,
-    fontWeight: '700',
+    paddingVertical: 0,
   },
-  listContent: {
-    paddingBottom: 90,
+  scrollList: {
+    paddingBottom: 95,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    color: '#8E8E93',
-    marginTop: 12,
-    fontSize: 14,
-  },
-  fab: {
+  fabButton: {
     position: 'absolute',
+    bottom: 20,
     right: 16,
-    bottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    gap: 8,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
   },
-  dialog: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-  },
-  dialogTitle: {
+  fabText: {
     color: '#FFFFFF',
-    fontSize: 17,
+    fontSize: 14.5,
     fontWeight: '700',
-  },
-  dialogBody: {
-    gap: 6,
-  },
-  dialogLine: {
-    color: '#E5E5EA',
-    fontSize: 13.5,
-  },
-  dialogBold: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  amountLine: {
-    marginTop: 6,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#34D399',
-  },
-  dialogInput: {
-    backgroundColor: '#121212',
-    marginBottom: 10,
   },
 });

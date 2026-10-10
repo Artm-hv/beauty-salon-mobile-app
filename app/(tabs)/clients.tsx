@@ -1,236 +1,196 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
 import {
-  Text,
-  Searchbar,
-  SegmentedButtons,
-  FAB,
-  Portal,
-  Dialog,
-  Button,
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   TextInput,
-} from 'react-native-paper';
+  Modal,
+  Alert,
+} from 'react-native';
+import { Text } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { ClientCard } from '../../components/ClientCard';
 import { MOCK_CLIENTS, ClientItem } from '../../services/mockData';
 
+type SegmentTab = 'ALL' | 'NEW' | 'INACTIVE' | 'NO_RECORD';
+
 /**
- * Екран 7: CRM-база клієнтів (ClientsCRMScreen)
+ * Екран 7: Клієнти (CRM картотека) за скріншотом EasyWeek
  * Зона відповідальності: Розробник 2 (Артем Г)
  */
 export default function ClientsCRMScreen() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<SegmentTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'VIP' | 'NEW' | 'INACTIVE'>('ALL');
+  const [isMultiSelect, setIsMultiSelect] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [clientsList, setClientsList] = useState<ClientItem[]>(MOCK_CLIENTS);
-
-  // Діалоги
-  const [selectedClient, setSelectedClient] = useState<ClientItem | null>(null);
-  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [newTag, setNewTag] = useState('');
 
   // Фільтрація клієнтів
   const filteredClients = useMemo(() => {
     return clientsList.filter((c) => {
-      // Фільтр категорії
-      if (categoryFilter !== 'ALL' && c.category !== categoryFilter) {
-        return false;
-      }
-      // Пошук (ім'я, телефон або теги)
+      // Фільтр за табами
+      if (activeTab === 'NEW' && c.category !== 'NEW') return false;
+      if (activeTab === 'INACTIVE' && c.category !== 'INACTIVE') return false;
+      if (activeTab === 'NO_RECORD' && c.visitCount > 0) return false;
+
+      // Пошук за ім'ям або телефоном
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = c.name.toLowerCase().includes(q);
         const matchPhone = c.phone.includes(q);
-        const matchTag = c.tags.some((t) => t.toLowerCase().includes(q));
-        return matchName || matchPhone || matchTag;
+        const matchCode = c.cnCode?.toLowerCase().includes(q);
+        return matchName || matchPhone || matchCode;
       }
       return true;
     });
-  }, [clientsList, categoryFilter, searchQuery]);
+  }, [clientsList, activeTab, searchQuery]);
 
-  // Загальний LTV бази
-  const totalLTV = useMemo(() => {
-    return clientsList.reduce((sum, c) => sum + c.totalSpent, 0);
-  }, [clientsList]);
+  const toggleMultiSelect = () => {
+    setIsMultiSelect(!isMultiSelect);
+    setSelectedIds([]);
+  };
 
-  const handleAddClient = () => {
-    if (!newName.trim() || !newPhone.trim()) return;
+  const handleCardPress = (client: ClientItem) => {
+    if (isMultiSelect) {
+      if (selectedIds.includes(client.id)) {
+        setSelectedIds(selectedIds.filter((id) => id !== client.id));
+      } else {
+        setSelectedIds([...selectedIds, client.id]);
+      }
+    } else {
+      Alert.alert(
+        client.name,
+        `Код: ${client.cnCode}\nТелефон: ${client.phone}\nВізитів: ${client.visitCount}\nОплачено: ${client.totalSpent} ₴`,
+        [
+          { text: 'Новий запис', onPress: () => router.push('/(tabs)/new-booking') },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
+    }
+  };
 
-    const newClient: ClientItem = {
-      id: `c-${Date.now()}`,
-      name: newName.trim(),
-      phone: newPhone.trim(),
-      category: 'NEW',
-      tags: ['Новий клієнт', newTag.trim() || 'Послуги'],
-      visitCount: 1,
-      averageCheck: 600,
-      totalSpent: 600,
-      lastVisitDate: '10 жовт 2026',
-      avatarColor: '#10B981',
-    };
-
-    setClientsList([newClient, ...clientsList]);
-    setIsAddClientOpen(false);
-    setNewName('');
-    setNewPhone('');
-    setNewTag('');
+  const handleQuickAdd = (client: ClientItem) => {
+    router.push('/(tabs)/new-booking');
   };
 
   return (
     <View style={styles.container}>
-      {/* 1. Верхня шапка */}
-      <View style={styles.header}>
-        <Text style={styles.title}>База клієнтів</Text>
-        <Text style={styles.subtitle}>CRM картотека постійних відвідувачів салону</Text>
+      {/* 1. Верхня панель дій з кнопкою "..." */}
+      <View style={styles.topBar}>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          style={styles.menuButton}
+          activeOpacity={0.7}
+          onPress={() => Alert.alert('Опції', 'Експорт бази клієнтів, імпорт контактів або налаштування полів')}
+        >
+          <MaterialCommunityIcons name="dots-horizontal" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* 2. Пошук */}
-      <View style={styles.searchContainer}>
-        <Searchbar
-          placeholder="Пошук за ім'ям, телефоном або тегами..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          inputStyle={styles.searchInput}
-          iconColor="#8E8E93"
-          placeholderTextColor="#636366"
-        />
-      </View>
+      {/* 2. Заголовок "Клієнти" */}
+      <Text style={styles.screenTitle}>Клієнти</Text>
 
-      {/* 3. Таби категорій */}
-      <View style={styles.tabsContainer}>
-        <SegmentedButtons
-          value={categoryFilter}
-          onValueChange={(val) => setCategoryFilter(val as any)}
-          buttons={[
-            { value: 'ALL', label: 'Всі' },
-            { value: 'VIP', label: '★ VIP' },
-            { value: 'NEW', label: 'Нові' },
-            { value: 'INACTIVE', label: 'Неактивні' },
-          ]}
-          style={styles.segmentedButtons}
-          density="small"
-        />
-      </View>
-
-      {/* 4. Метрики бази (лічильник + LTV) */}
-      <View style={styles.summaryBar}>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Клієнтів:</Text>
-          <Text style={styles.summaryValue}>
-            {filteredClients.length} з {clientsList.length}
+      {/* 3. Сегментований перемикач (Всі, Нові, Неактивні, Без запису) */}
+      <View style={styles.segmentContainer}>
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'ALL' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('ALL')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'ALL' && styles.segmentTextActive]}>
+            Всі
           </Text>
-        </View>
-        <View style={styles.summaryItem}>
-          <Text style={styles.summaryLabel}>Сумарний LTV:</Text>
-          <Text style={styles.ltvHighlight}>{totalLTV.toLocaleString('uk-UA')} ₴</Text>
-        </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'NEW' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('NEW')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'NEW' && styles.segmentTextActive]}>
+            Нові
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'INACTIVE' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('INACTIVE')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'INACTIVE' && styles.segmentTextActive]}>
+            Неактивні
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentTab, activeTab === 'NO_RECORD' && styles.segmentTabActive]}
+          onPress={() => setActiveTab('NO_RECORD')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.segmentText, activeTab === 'NO_RECORD' && styles.segmentTextActive]}>
+            Без запису
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 5. Список клієнтів */}
-      <ScrollView contentContainerStyle={styles.listContent}>
-        {filteredClients.map((client) => (
+      {/* 4. Пошук та кнопка фільтрів */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <TextInput
+            placeholder="Пошук"
+            placeholderTextColor="#8E8E93"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+          <MaterialCommunityIcons name="magnify" size={22} color="#8E8E93" />
+        </View>
+
+        <TouchableOpacity
+          style={styles.filterButton}
+          activeOpacity={0.7}
+          onPress={() => Alert.alert('Фільтри', 'Фільтр за тегами, майстрами та послугами')}
+        >
+          <MaterialCommunityIcons name="tune-variant" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* 5. Плашка лічильника (15 клієнтів показано з 2502 + Множинний вибір) */}
+      <View style={styles.counterCard}>
+        <View>
+          <Text style={styles.counterMainText}>15 клієнтів показано</Text>
+          <Text style={styles.counterSubText}>з 2502</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.multiSelectBtn, isMultiSelect && styles.multiSelectBtnActive]}
+          onPress={toggleMultiSelect}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.multiSelectText}>
+            {isMultiSelect ? `Обрано (${selectedIds.length})` : 'Множинний вибір'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 6. Список карток клієнтів */}
+      <ScrollView
+        contentContainerStyle={styles.scrollList}
+        showsVerticalScrollIndicator={false}
+      >
+        {filteredClients.map((client, idx) => (
           <ClientCard
             key={client.id}
             client={client}
-            onPress={() => setSelectedClient(client)}
+            onPress={() => handleCardPress(client)}
+            showAddButton={client.cnCode === 'CN-2100'}
+            onAddPress={() => handleQuickAdd(client)}
           />
         ))}
       </ScrollView>
-
-      {/* 6. FAB для додавання нового клієнта */}
-      <FAB
-        icon="account-plus"
-        label="Новий клієнт"
-        style={styles.fab}
-        color="#000000"
-        onPress={() => setIsAddClientOpen(true)}
-      />
-
-      {/* Діалог деталей клієнта */}
-      <Portal>
-        <Dialog
-          visible={!!selectedClient}
-          onDismiss={() => setSelectedClient(null)}
-          style={styles.dialog}
-        >
-          <Dialog.Title style={styles.dialogTitle}>{selectedClient?.name}</Dialog.Title>
-          <Dialog.Content>
-            {selectedClient && (
-              <View style={styles.dialogBody}>
-                <Text style={styles.dialogLine}>
-                  📞 <Text style={styles.dialogBold}>Телефон:</Text> {selectedClient.phone}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  🕒 <Text style={styles.dialogBold}>Останній візит:</Text> {selectedClient.lastVisitDate}
-                </Text>
-                <Text style={styles.dialogLine}>
-                  🏷 <Text style={styles.dialogBold}>Теги:</Text> {selectedClient.tags.join(', ')}
-                </Text>
-                <View style={styles.dialogMetricsBox}>
-                  <Text style={styles.metricText}>Візитів: {selectedClient.visitCount}</Text>
-                  <Text style={styles.metricText}>Сер. чек: {selectedClient.averageCheck} ₴</Text>
-                  <Text style={[styles.metricText, { color: '#34D399', fontWeight: '700' }]}>
-                    Всього: {selectedClient.totalSpent} ₴
-                  </Text>
-                </View>
-              </View>
-            )}
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button textColor="#C68A2C" onPress={() => setSelectedClient(null)}>
-              Закрити
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
-
-      {/* Діалог додавання клієнта */}
-      <Portal>
-        <Dialog
-          visible={isAddClientOpen}
-          onDismiss={() => setIsAddClientOpen(false)}
-          style={styles.dialog}
-        >
-          <Dialog.Title style={styles.dialogTitle}>Додати нового клієнта</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Ім'я та прізвище"
-              value={newName}
-              onChangeText={setNewName}
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-            <TextInput
-              label="Номер телефону"
-              value={newPhone}
-              onChangeText={setNewPhone}
-              keyboardType="phone-pad"
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-            <TextInput
-              label="Тег / уподобання"
-              value={newTag}
-              onChangeText={setNewTag}
-              placeholder="напр. Любить френч"
-              mode="outlined"
-              style={styles.dialogInput}
-              textColor="#FFFFFF"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button textColor="#8E8E93" onPress={() => setIsAddClientOpen(false)}>
-              Скасувати
-            </Button>
-            <Button textColor="#C68A2C" onPress={handleAddClient}>
-              Додати в CRM
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
     </View>
   );
 }
@@ -239,119 +199,127 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    paddingTop: 45,
+    paddingTop: 44,
   },
-  header: {
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  title: {
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#1F1F23',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  screenTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  searchContainer: {
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 14,
   },
-  searchbar: {
-    backgroundColor: '#121212',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#242426',
-    height: 44,
-  },
-  searchInput: {
-    color: '#FFFFFF',
-    fontSize: 13,
-  },
-  tabsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  segmentedButtons: {
-    backgroundColor: '#121212',
-  },
-  summaryBar: {
+  segmentContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    backgroundColor: '#1E1E22',
+    borderRadius: 12,
     marginHorizontal: 16,
-    backgroundColor: '#161616',
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#242426',
+    padding: 3,
+    height: 42,
   },
-  summaryItem: {
+  segmentTab: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 9,
+  },
+  segmentTabActive: {
+    backgroundColor: '#34343A',
+  },
+  segmentText: {
+    color: '#8E8E93',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    gap: 10,
   },
-  summaryLabel: {
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141416',
+    borderWidth: 1,
+    borderColor: '#28282C',
+    borderRadius: 12,
+    height: 44,
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  filterButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#25252A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  counterCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1E',
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  counterMainText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  counterSubText: {
     color: '#8E8E93',
-    fontSize: 12,
+    fontSize: 13,
+    marginTop: 2,
   },
-  summaryValue: {
+  multiSelectBtn: {
+    backgroundColor: '#2B2B30',
+    borderWidth: 1,
+    borderColor: '#3A3A40',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  multiSelectBtnActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  multiSelectText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
   },
-  ltvHighlight: {
-    color: '#34D399',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  listContent: {
-    paddingBottom: 90,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-  },
-  dialog: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-  },
-  dialogTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  dialogBody: {
-    gap: 8,
-  },
-  dialogLine: {
-    color: '#E5E5EA',
-    fontSize: 13.5,
-  },
-  dialogBold: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  dialogMetricsBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#121212',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 6,
-  },
-  metricText: {
-    fontSize: 12,
-    color: '#E5E5EA',
-  },
-  dialogInput: {
-    backgroundColor: '#121212',
-    marginBottom: 10,
+  scrollList: {
+    paddingBottom: 85,
   },
 });
