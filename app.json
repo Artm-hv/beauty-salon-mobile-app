@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Svoya Nail Studio",
+    "slug": "beauty-salon-mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#7B2CBF"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "svoyastudio"
+  }
+}
