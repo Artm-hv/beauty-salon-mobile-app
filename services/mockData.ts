@@ -304,3 +304,91 @@ export const MOCK_ORDERS: OrderItem[] = [
     paymentMethod: 'CARD',
   },
 ];
+
+export interface ClientItem {
+  id: string;
+  name: string;
+  phone: string;
+  category: 'ALL' | 'NEW' | 'VIP' | 'INACTIVE';
+  tags: string[];
+  visitCount: number;
+  averageCheck: number;
+  totalSpent: number;
+  lastVisitDate: string;
+  avatarColor: string;
+}
+
+export const MOCK_CLIENTS: ClientItem[] = [
+  {
+    id: 'c-1',
+    name: 'Ірина Мельник',
+    phone: '+380985962491',
+    category: 'VIP',
+    tags: ['VIP', 'Любить каву', 'Постійна'],
+    visitCount: 12,
+    averageCheck: 720,
+    totalSpent: 8640,
+    lastVisitDate: '10 жовт 2026',
+    avatarColor: '#C68A2C',
+  },
+  {
+    id: 'c-2',
+    name: 'Мар\'яна Козак',
+    phone: '+380978832100',
+    category: 'NEW',
+    tags: ['Нова', 'Тільки чистка'],
+    visitCount: 2,
+    averageCheck: 400,
+    totalSpent: 800,
+    lastVisitDate: '08 жовт 2026',
+    avatarColor: '#10B981',
+  },
+  {
+    id: 'c-3',
+    name: 'Вероніка Гіжовська',
+    phone: '+380689317049',
+    category: 'VIP',
+    tags: ['VIP', 'Складний дизайн', 'Завжди вчасно'],
+    visitCount: 18,
+    averageCheck: 1050,
+    totalSpent: 18900,
+    lastVisitDate: '10 жовт 2026',
+    avatarColor: '#8B5CF6',
+  },
+  {
+    id: 'c-4',
+    name: 'Анастасія Бойко',
+    phone: '+380971084044',
+    category: 'ALL',
+    tags: ['Експрес манікюр', 'Обідня перерва'],
+    visitCount: 6,
+    averageCheck: 600,
+    totalSpent: 3600,
+    lastVisitDate: '05 жовт 2026',
+    avatarColor: '#EC4899',
+  },
+  {
+    id: 'c-5',
+    name: 'Лариса Бондар',
+    phone: '+380500700278',
+    category: 'ALL',
+    tags: ['Гель-лак', 'Французький'],
+    visitCount: 8,
+    averageCheck: 850,
+    totalSpent: 6800,
+    lastVisitDate: '02 жовт 2026',
+    avatarColor: '#3B82F6',
+  },
+  {
+    id: 'c-6',
+    name: 'Ольга Павленко',
+    phone: '+380507890123',
+    category: 'INACTIVE',
+    tags: ['Неактивна', 'Спізнюється'],
+    visitCount: 3,
+    averageCheck: 500,
+    totalSpent: 1500,
+    lastVisitDate: '15 лип 2026',
+    avatarColor: '#6B7280',
+  },
+];
