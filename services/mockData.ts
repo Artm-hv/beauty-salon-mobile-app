@@ -209,3 +209,98 @@ export const MOCK_APPOINTMENTS: AppointmentItem[] = [
     isConfirmed: true,
   },
 ];
+
+export interface OrderItem {
+  id: string;
+  orderNumber: string;
+  status: 'COMPLETED' | 'UNPAID' | 'CANCELLED';
+  date: string;
+  clientName: string;
+  clientPhone: string;
+  cashierName: string;
+  itemsCount: number;
+  services: string[];
+  totalAmount: number;
+  paymentMethod: 'CARD' | 'CASH';
+}
+
+export const MOCK_ORDERS: OrderItem[] = [
+  {
+    id: 'ord-8130',
+    orderNumber: '№8130',
+    status: 'COMPLETED',
+    date: '10 жовт 2026, 11:35',
+    clientName: 'Ірина Мельник',
+    clientPhone: '+380985962491',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 2,
+    services: ['Комплексний манікюр', 'Зняття покриття'],
+    totalAmount: 700.0,
+    paymentMethod: 'CARD',
+  },
+  {
+    id: 'ord-8131',
+    orderNumber: '№8131',
+    status: 'COMPLETED',
+    date: '10 жовт 2026, 12:40',
+    clientName: 'Мар\'яна Козак',
+    clientPhone: '+380978832100',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 1,
+    services: ['Гігієнічний манікюр'],
+    totalAmount: 350.0,
+    paymentMethod: 'CASH',
+  },
+  {
+    id: 'ord-8132',
+    orderNumber: '№8132',
+    status: 'UNPAID',
+    date: '10 жовт 2026, 14:10',
+    clientName: 'Вероніка Гіжовська',
+    clientPhone: '+380689317049',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 3,
+    services: ['Комплекс гелева-корекція', 'Дизайн 2 пальчики', 'Олійка для кутикули'],
+    totalAmount: 1250.0,
+    paymentMethod: 'CARD',
+  },
+  {
+    id: 'ord-8133',
+    orderNumber: '№8133',
+    status: 'COMPLETED',
+    date: '10 жовт 2026, 15:30',
+    clientName: 'Анастасія Бойко',
+    clientPhone: '+380971084044',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 1,
+    services: ['Експрес манікюр'],
+    totalAmount: 600.0,
+    paymentMethod: 'CARD',
+  },
+  {
+    id: 'ord-8134',
+    orderNumber: '№8134',
+    status: 'CANCELLED',
+    date: '10 жовт 2026, 16:15',
+    clientName: 'Юлія Мороз',
+    clientPhone: '+380976478152',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 2,
+    services: ['Повна чистка', 'Зняття'],
+    totalAmount: 700.0,
+    paymentMethod: 'CASH',
+  },
+  {
+    id: 'ord-8135',
+    orderNumber: '№8135',
+    status: 'UNPAID',
+    date: '10 жовт 2026, 17:00',
+    clientName: 'Лариса Бондар',
+    clientPhone: '+380500700278',
+    cashierName: 'Анастасія (Адмін)',
+    itemsCount: 1,
+    services: ['Комплекс гель-лак'],
+    totalAmount: 850.0,
+    paymentMethod: 'CARD',
+  },
+];
