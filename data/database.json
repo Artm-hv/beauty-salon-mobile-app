@@ -1,0 +1,232 @@
+{
+  "masters": [
+    {
+      "id": "master-1",
+      "name": "Артем Гіжовський",
+      "shortName": "Артем Г.",
+      "specialty": "Топ-майстер / Адмін",
+      "avatarUrl": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop&crop=faces",
+      "appointmentCount": 3
+    },
+    {
+      "id": "master-2",
+      "name": "Ігор Намачинський",
+      "shortName": "Ігор Н.",
+      "specialty": "Майстер",
+      "avatarUrl": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&h=100&fit=crop&crop=faces",
+      "appointmentCount": 0
+    },
+    {
+      "id": "master-3",
+      "name": "Артем Лабунський",
+      "shortName": "Артем Л.",
+      "specialty": "Майстер",
+      "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
+      "appointmentCount": 0
+    }
+  ],
+  "clients": [
+    {
+      "id": "c-1791716644304",
+      "cnCode": "CN-5484",
+      "name": "Оадад",
+      "phone": "+793607790",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#F59E0B"
+    },
+    {
+      "id": "c-1791716627546",
+      "cnCode": "CN-9969",
+      "name": "Арсен маркарян",
+      "phone": "+487931607790",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#8B5CF6"
+    },
+    {
+      "id": "c-1791713212590",
+      "cnCode": "CN-5256",
+      "name": "Рпі чи лгд",
+      "phone": "+380 67 000 0000",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#EC4899"
+    },
+    {
+      "id": "c-1791713207237",
+      "cnCode": "CN-1686",
+      "name": "Гирльбю",
+      "phone": "+380 67 000 0000",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#38BDF8"
+    },
+    {
+      "id": "c-1791713199565",
+      "cnCode": "CN-5467",
+      "name": "Ьддлл",
+      "phone": "+380 67 000 0000",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#EC4899"
+    },
+    {
+      "id": "c-1791711539441",
+      "cnCode": "CN-7578",
+      "name": "Петросяг",
+      "phone": "348405827681",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#EC4899"
+    },
+    {
+      "id": "c-1791711506974",
+      "cnCode": "CN-6458",
+      "name": "Нігамен",
+      "phone": "+380 67 000 0000",
+      "category": "NEW",
+      "tags": [
+        "Новий клієнт"
+      ],
+      "visitCount": 0,
+      "averageCheck": 0,
+      "totalSpent": 0,
+      "lastVisitDate": "11 жовт. 2026 р.",
+      "avatarColor": "#8B5CF6"
+    }
+  ],
+  "bookings": [
+    {
+      "id": "b-1791716552358",
+      "masterId": "master-1",
+      "clientName": "Петросяг",
+      "clientPhone": "348405827681",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "",
+      "date": "2026-10-16",
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "price": 700,
+      "colorType": "green",
+      "hasPayment": false,
+      "hasComment": false,
+      "isConfirmed": true
+    },
+    {
+      "id": "b-1791713169593",
+      "masterId": "master-1",
+      "clientName": "Петросяг",
+      "clientPhone": "348405827681",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "",
+      "date": "2026-10-10",
+      "startTime": "14:00",
+      "endTime": "15:30",
+      "price": 700,
+      "colorType": "mustard",
+      "hasPayment": false,
+      "hasComment": false,
+      "isConfirmed": true
+    },
+    {
+      "id": "b-1791711550812",
+      "masterId": "master-1",
+      "clientName": "Анонімний клієнт",
+      "clientPhone": "+380 67 000 0000",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "",
+      "date": "2026-10-10",
+      "startTime": "12:00",
+      "endTime": "13:30",
+      "price": 700,
+      "colorType": "mustard",
+      "hasPayment": false,
+      "hasComment": false,
+      "isConfirmed": true
+    }
+  ],
+  "orders": [
+    {
+      "id": "ord-b-1791716552358",
+      "orderNumber": "№1002",
+      "status": "UNPAID",
+      "date": "2026-10-16 13:00",
+      "clientName": "Петросяг",
+      "clientPhone": "348405827681",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
+    {
+      "id": "ord-b-1791713169593",
+      "orderNumber": "№1001",
+      "status": "COMPLETED",
+      "date": "2026-10-10 14:00",
+      "clientName": "Петросяг",
+      "clientPhone": "348405827681",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
+    {
+      "id": "ord-b-1791711550812",
+      "orderNumber": "№1000",
+      "status": "UNPAID",
+      "date": "2026-10-10 12:00",
+      "clientName": "Анонімний клієнт",
+      "clientPhone": "+380 67 000 0000",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    }
+  ]
+}

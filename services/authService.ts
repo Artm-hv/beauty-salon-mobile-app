@@ -1,13 +1,13 @@
 import { User, UserRole } from '../constants/types';
 
-// Тестові облікові записи для миттєвої демонстрації на парах
+// Тестові облікові записи розробників для демонстрації викладачу
 export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
   master: {
     id: 'user-master-1',
-    email: 'master@svoya.ua',
-    password: 'master123',
-    firstName: 'Вероніка',
-    lastName: 'Гіжовська',
+    email: 'artem@svoya.ua',
+    password: 'artem123',
+    firstName: 'Артем',
+    lastName: 'Гіжовський',
     phone: '+380689317049',
     role: 'MASTER',
   },
@@ -15,17 +15,35 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     id: 'user-admin-1',
     email: 'admin@svoya.ua',
     password: 'admin123',
-    firstName: 'Анастасія',
-    lastName: 'Адміністратор',
+    firstName: 'Артем',
+    lastName: 'Гіжовський (Адмін)',
     phone: '+380681112233',
     role: 'ADMIN',
+  },
+  ihor: {
+    id: 'user-ihor-1',
+    email: 'ihor@svoya.ua',
+    password: 'ihor123',
+    firstName: 'Ігор',
+    lastName: 'Намачинський',
+    phone: '+380671234567',
+    role: 'MASTER',
+  },
+  labunskyi: {
+    id: 'user-labunskyi-1',
+    email: 'labunskyi@svoya.ua',
+    password: 'labunskyi123',
+    firstName: 'Артем',
+    lastName: 'Лабунський',
+    phone: '+380679876543',
+    role: 'MASTER',
   },
   pending: {
     id: 'user-pending-1',
     email: 'pending@svoya.ua',
     password: 'pending123',
-    firstName: 'Оксана',
-    lastName: 'Новачок',
+    firstName: 'Новий',
+    lastName: 'Працівник',
     phone: '+380679998877',
     role: 'PENDING',
   },

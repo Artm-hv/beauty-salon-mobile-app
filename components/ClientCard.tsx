@@ -44,17 +44,7 @@ export const ClientCard: React.FC<ClientCardProps> = ({
           </View>
         </View>
 
-        {showAddButton ? (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={onAddPress || onPress}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addButtonText}>+ Додати</Text>
-          </TouchableOpacity>
-        ) : (
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#8E8E93" />
-        )}
+        <MaterialCommunityIcons name="chevron-right" size={24} color="#8E8E93" />
       </View>
 
       {/* Розділювач */}

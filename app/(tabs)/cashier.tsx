@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { OrderCard } from '../../components/OrderCard';
-import { MOCK_ORDERS, OrderItem } from '../../services/mockData';
+import { OrderItem } from '../../services/mockData';
+import { apiClient } from '../../services/api';
 
 type OrderStatusTab = 'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED';
 
 /**
- * Екран 4: Замовлення (Каса) за точним скріншотом EasyWeek
- * Зона відповідальності: Розробник 2 (Артем Г)
+ * Екран: Замовлення (Каса)
+ * Зона відповідальності: Розробник 2 (Артем Гіжовський)
+ * Підключено збереження та зміну статусів замовлень (GET, POST, PUT)
  */
 export default function CashierScreen() {
   const router = useRouter();
@@ -25,7 +29,31 @@ export default function CashierScreen() {
   const [dateRange, setDateRange] = useState('10 вер 2026 р. - 11 жовт 2026 р.');
   const [selectedExecutor, setSelectedExecutor] = useState('Всі виконавці');
   const [searchQuery, setSearchQuery] = useState('');
-  const [ordersList, setOrdersList] = useState<OrderItem[]>(MOCK_ORDERS);
+  const [ordersList, setOrdersList] = useState<OrderItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Завантаження замовлень з REST API (GET /api/orders)
+  const fetchOrders = useCallback(async () => {
+    try {
+      const data = await apiClient.getOrders();
+      setOrdersList(data);
+    } catch {} finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders();
+    }, [fetchOrders])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchOrders();
+  }, [fetchOrders]);
 
   // Фільтрація замовлень
   const filteredOrders = useMemo(() => {
@@ -34,6 +62,11 @@ export default function CashierScreen() {
       if (activeTab === 'UNPAID' && ord.status !== 'UNPAID') return false;
       if (activeTab === 'COMPLETED' && ord.status !== 'COMPLETED') return false;
       if (activeTab === 'CANCELLED' && ord.status !== 'CANCELLED') return false;
+
+      // Фільтр за виконавцем / касиром
+      if (selectedExecutor !== 'Всі виконавці' && ord.cashierName !== selectedExecutor) {
+        return false;
+      }
 
       // Пошук за номером, клієнтом або послугою
       if (searchQuery.trim()) {
@@ -45,14 +78,29 @@ export default function CashierScreen() {
       }
       return true;
     });
-  }, [ordersList, activeTab, searchQuery]);
+  }, [ordersList, activeTab, selectedExecutor, searchQuery]);
 
+  // Дії із замовленням (перевірка PUT методу)
   const handleOrderPress = (order: OrderItem) => {
     Alert.alert(
       `Замовлення ${order.orderNumber}`,
-      `Статус: ${order.status}\nКлієнт: ${order.clientName}\nКасир: ${order.cashierName}\nСума: ${order.totalAmount} ₴\nПослуги:\n• ${order.services.join('\n• ')}`,
+      `Статус: ${order.status === 'COMPLETED' ? 'Сплачено' : order.status === 'UNPAID' ? 'Очікує оплати' : 'Скасовано'}\nКлієнт: ${order.clientName}\nАдміністратор: ${order.cashierName}\nСума: ${order.totalAmount} ₴\nПослуги:\n• ${order.services.join('\n• ')}`,
       [
-        { text: 'Друк чека', onPress: () => Alert.alert('Чек', 'Чек надіслано на друк') },
+        {
+          text: 'Сплачено (PUT)',
+          onPress: async () => {
+            await apiClient.updateOrderStatus(order.id, 'COMPLETED');
+            fetchOrders();
+          },
+        },
+        {
+          text: 'Скасувати чек (PUT)',
+          style: 'destructive',
+          onPress: async () => {
+            await apiClient.updateOrderStatus(order.id, 'CANCELLED');
+            fetchOrders();
+          },
+        },
         { text: 'Закрити', style: 'cancel' },
       ]
     );
@@ -60,17 +108,18 @@ export default function CashierScreen() {
 
   const handleDateFilterPress = () => {
     Alert.alert('Період замовлень', 'Оберіть часовий проміжок для перегляду оплат', [
-      { text: 'Сьогодні', onPress: () => setDateRange('10 жовт 2026 р.') },
+      { text: 'Сьогодні (10 жовт 2026 р.)', onPress: () => setDateRange('10 жовт 2026 р.') },
       { text: 'Останній місяць', onPress: () => setDateRange('10 вер 2026 р. - 11 жовт 2026 р.') },
       { text: 'Скасувати', style: 'cancel' },
     ]);
   };
 
   const handleExecutorFilterPress = () => {
-    Alert.alert('Виконавець', 'Фільтрувати чеки за майстром', [
-      { text: 'Всі виконавці', onPress: () => setSelectedExecutor('Всі виконавці') },
-      { text: 'Юлія Півень', onPress: () => setSelectedExecutor('Юлія Півень') },
-      { text: 'Таня Майстер', onPress: () => setSelectedExecutor('Таня Майстер') },
+    Alert.alert('Адміністратор', 'Фільтрувати чеки за адміністратором', [
+      { text: 'Всі адміністратори', onPress: () => setSelectedExecutor('Всі виконавці') },
+      { text: 'Артем Гіжовський (Адміністратор)', onPress: () => setSelectedExecutor('Артем Гіжовський (Адміністратор)') },
+      { text: 'Ігор Намачинський', onPress: () => setSelectedExecutor('Ігор Намачинський') },
+      { text: 'Артем Лабунський', onPress: () => setSelectedExecutor('Артем Лабунський') },
       { text: 'Скасувати', style: 'cancel' },
     ]);
   };
@@ -78,26 +127,20 @@ export default function CashierScreen() {
   const handleCreateOrder = () => {
     Alert.alert(
       'Нове замовлення',
-      'Бажаєте створити нове замовлення на касі чи перейти до бронювання?',
+      'Бажаєте створити чек на касі чи перейти до детального бронювання?',
       [
         { text: 'Нове бронювання', onPress: () => router.push('/(tabs)/new-booking') },
         {
           text: 'Швидкий чек (700 ₴)',
-          onPress: () => {
-            const newOrd: OrderItem = {
-              id: `ord-${Date.now()}`,
-              orderNumber: `№${Math.floor(8143 + Math.random() * 20)}`,
-              status: 'COMPLETED',
-              date: '10 жовт 2026 р. 20:35',
-              clientName: 'ольга',
-              clientPhone: '+380 67 278 8818',
-              cashierName: 'Настя Кобзар',
-              itemsCount: 1,
+          onPress: async () => {
+            await apiClient.createOrder({
+              totalAmount: 700,
               services: ['Комплексний манікюр + покриття'],
-              totalAmount: 700.0,
-              paymentMethod: 'CARD',
-            };
-            setOrdersList([newOrd, ...ordersList]);
+              clientName: 'Гість салону',
+              cashierName: 'Артем Гіжовський (Адміністратор)',
+              status: 'COMPLETED',
+            });
+            fetchOrders();
           },
         },
         { text: 'Скасувати', style: 'cancel' },
@@ -107,14 +150,15 @@ export default function CashierScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 1. Верхня плашка: кнопка повернення назад */}
+      {/* 1. Верхня плашка: кнопка оновлення даних */}
       <View style={styles.topBar}>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity
           style={styles.backButton}
           activeOpacity={0.7}
-          onPress={() => router.push('/(tabs)/calendar')}
+          onPress={fetchOrders}
         >
-          <MaterialCommunityIcons name="arrow-left" size={22} color="#FFFFFF" />
+          <MaterialCommunityIcons name="refresh" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -164,7 +208,7 @@ export default function CashierScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 4. Фільтр дат (10 вер 2026 р. - 11 жовт 2026 р. ▾) */}
+      {/* 4. Фільтр дат */}
       <View style={styles.filterPillWrapper}>
         <TouchableOpacity
           style={styles.filterPill}
@@ -176,25 +220,11 @@ export default function CashierScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 5. Фільтр виконавця (Виконавець ▾) */}
-      <View style={styles.filterPillWrapper}>
-        <TouchableOpacity
-          style={styles.filterPill}
-          activeOpacity={0.75}
-          onPress={handleExecutorFilterPress}
-        >
-          <Text style={styles.filterPillText}>
-            {selectedExecutor === 'Всі виконавці' ? 'Виконавець' : selectedExecutor}
-          </Text>
-          <MaterialCommunityIcons name="menu-down" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
       {/* 6. Пошук */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <TextInput
-            placeholder="Пошук"
+            placeholder="Пошук чека за клієнтом або послугою"
             placeholderTextColor="#8E8E93"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -208,25 +238,42 @@ export default function CashierScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollList}
         showsVerticalScrollIndicator={false}
-      >
-        {filteredOrders.map((ord) => (
-          <OrderCard
-            key={ord.id}
-            order={ord}
-            onPress={() => handleOrderPress(ord)}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#4CAF50"
+            colors={['#4CAF50']}
           />
-        ))}
-      </ScrollView>
-
-      {/* 8. Плаваюча кнопка "🛒 Нове замовлення" (FAB) */}
-      <TouchableOpacity
-        style={styles.fabButton}
-        activeOpacity={0.85}
-        onPress={handleCreateOrder}
+        }
       >
-        <MaterialCommunityIcons name="cart-outline" size={20} color="#FFFFFF" />
-        <Text style={styles.fabText}>Нове замовлення</Text>
-      </TouchableOpacity>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.loadingText}>Завантаження замовлень...</Text>
+          </View>
+        ) : filteredOrders.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <MaterialCommunityIcons name="cash-register" size={44} color="#8E8E93" />
+            </View>
+            <Text style={styles.emptyTitle}>Замовлень не знайдено</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery.trim()
+                ? 'Нічого не відповідає вашому запиту'
+                : 'Тут з\'являтимуться чеки після створення записів у календарі або швидких оплат'}
+            </Text>
+          </View>
+        ) : (
+          filteredOrders.map((ord) => (
+            <OrderCard
+              key={ord.id}
+              order={ord}
+              onPress={() => handleOrderPress(ord)}
+            />
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -239,6 +286,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     marginBottom: 6,
@@ -328,6 +376,45 @@ const styles = StyleSheet.create({
   },
   scrollList: {
     paddingBottom: 95,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    paddingTop: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#8E8E93',
+    marginTop: 12,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    paddingTop: 50,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#1E1E22',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: '#8E8E93',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   fabButton: {
     position: 'absolute',

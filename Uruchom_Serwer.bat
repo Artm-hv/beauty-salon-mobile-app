@@ -5,11 +5,11 @@ cd /d "%~dp0"
 
 cls
 echo ================================================================
-echo    💅 SVOYA NAIL STUDIO - SERWER DEWELOPERSKI (Expo Metro)
+echo    SVOYA NAIL STUDIO - SERWER DEWELOPERSKI (Expo Metro + REST API)
 echo ================================================================
 echo.
 
-:: 1. Sprawdzanie obecności folderu node_modules
+:: 1. Sprawdzanie obecnosci folderu node_modules
 if not exist "node_modules\" (
     echo [!] Brak folderu node_modules. Instalowanie zaleznosci...
     call npm install --legacy-peer-deps
@@ -20,10 +20,17 @@ if not exist "node_modules\" (
     )
 )
 
-:: 2. Zwalnianie portu 8081 w przypadku zawieszenia poprzedniego procesu
+:: 2. Zwalnianie portow 8081 i 8000 w przypadku zawieszenia poprzednich procesow
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8081 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
-:: 3. Sprawdzanie autoryzacji w Expo CLI
+:: 3. Uruchamianie serwera REST API w tle (Python)
+if exist "backend\server.py" (
+    echo [OK] Uruchamianie serwera REST API - Python port 8000
+    start "Svoya REST API" /min python backend\server.py
+)
+
+:: 4. Sprawdzanie autoryzacji w Expo CLI
 set EXPO_USER=
 for /f "tokens=*" %%i in ('npx expo whoami 2^>nul') do set EXPO_USER=%%i
 

@@ -64,11 +64,13 @@ export default function LoginScreen() {
   };
 
   // Швидке автозаповнення для показу викладачу
-  const fillDemoCredentials = (roleKey: 'master' | 'admin' | 'pending') => {
+  const fillDemoCredentials = (roleKey: 'master' | 'admin' | 'ihor' | 'labunskyi' | 'pending') => {
     const account = DEMO_ACCOUNTS[roleKey];
-    setEmail(account.email);
-    setPassword(account.password);
-    setErrorMessage('');
+    if (account) {
+      setEmail(account.email);
+      setPassword(account.password);
+      setErrorMessage('');
+    }
   };
 
   return (
@@ -150,8 +152,22 @@ export default function LoginScreen() {
             style={styles.loginButton}
             contentStyle={styles.buttonContent}
             buttonColor={Colors.primary}
+            textColor="#000000"
           >
             Увійти
+          </Button>
+
+          <Button
+            mode="outlined"
+            icon="lightning-bolt"
+            onPress={() => {
+              authService.setCurrentUser(DEMO_ACCOUNTS.master);
+              router.replace('/(tabs)/calendar');
+            }}
+            style={styles.guestButton}
+            textColor={Colors.text}
+          >
+            Миттєвий вхід без пароля (Майстер)
           </Button>
 
           <TouchableOpacity
@@ -176,7 +192,21 @@ export default function LoginScreen() {
               onPress={() => fillDemoCredentials('master')}
               style={styles.chip}
             >
-              Майстер
+              Артем Г.
+            </Chip>
+            <Chip
+              icon="account"
+              onPress={() => fillDemoCredentials('ihor')}
+              style={styles.chip}
+            >
+              Ігор Н.
+            </Chip>
+            <Chip
+              icon="account"
+              onPress={() => fillDemoCredentials('labunskyi')}
+              style={styles.chip}
+            >
+              Артем Л.
             </Chip>
             <Chip
               icon="shield-account"
@@ -184,13 +214,6 @@ export default function LoginScreen() {
               style={styles.chip}
             >
               Адмін
-            </Chip>
-            <Chip
-              icon="clock-outline"
-              onPress={() => fillDemoCredentials('pending')}
-              style={styles.chip}
-            >
-              Очікує ролі
             </Chip>
           </View>
         </Surface>
@@ -251,6 +274,11 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: 8,
     borderRadius: 10,
+  },
+  guestButton: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderColor: Colors.cardBorder,
   },
   buttonContent: {
     paddingVertical: 6,

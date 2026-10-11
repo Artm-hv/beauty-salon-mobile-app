@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -17,6 +17,7 @@ import {
   Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { AppointmentCard } from '../../components/AppointmentCard';
 import {
@@ -25,6 +26,7 @@ import {
   AppointmentItem,
   Master,
 } from '../../services/mockData';
+import { apiClient } from '../../services/api';
 import { useAccelerometer } from '../../hooks/useAccelerometer';
 
 // Години сітки (від 10:00 до 21:00 як на скріншоті EasyWeek)
@@ -46,14 +48,36 @@ const DAYS_LIST = [
 ];
 
 /**
- * Екран 3: Календар і розклад майстрів (EasyWeek Dark Edition)
- * Зона відповідальності: Розробник 1 (Ігор)
+ * Екран: Календар і розклад майстрів (EasyWeek Dark Edition)
+ * Зона відповідальності: Розробник 1 (Ігор Намачинський)
+ * Підключено завантаження та оновлення через REST API (GET, PUT /api/bookings)
  */
 export default function CalendarScreen() {
   // Вибраний день (за замовчуванням 10 жовтня 2026)
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedMasterId, setSelectedMasterId] = useState<string | null>(null);
+
+  // Стан даних з REST API
+  const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
+  const [mastersList, setMastersList] = useState<Master[]>(MOCK_MASTERS);
+
+  // Завантаження розкладу з сервера
+  const fetchCalendarData = useCallback(async () => {
+    try {
+      const appts = await apiClient.getAppointments();
+      setAppointmentsList(appts);
+      const masters = await apiClient.getMasters();
+      setMastersList(masters);
+    } catch {}
+  }, []);
+
+  // Оновлення при кожному відкритті вкладки
+  useFocusEffect(
+    useCallback(() => {
+      fetchCalendarData();
+    }, [fetchCalendarData])
+  );
 
   // Діалог деталей візиту
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
@@ -153,10 +177,10 @@ export default function CalendarScreen() {
   // Фільтрація майстрів для відображення
   const displayedMasters = useMemo(() => {
     if (selectedMasterId) {
-      return MOCK_MASTERS.filter((m) => m.id === selectedMasterId);
+      return mastersList.filter((m) => m.id === selectedMasterId);
     }
-    return MOCK_MASTERS;
-  }, [selectedMasterId]);
+    return mastersList;
+  }, [mastersList, selectedMasterId]);
 
   return (
     <View style={styles.rootContainer}>
@@ -201,7 +225,7 @@ export default function CalendarScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Кнопки режимів (Сітка, Список, Фільтр) */}
+        {/* Кнопки режимів (Сітка, Список, Оновити) */}
         <View style={styles.modeButtonGroup}>
           <TouchableOpacity
             style={[styles.modeButton, viewMode === 'grid' && styles.modeButtonActive]}
@@ -225,8 +249,14 @@ export default function CalendarScreen() {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.modeButton}>
-            <MaterialCommunityIcons name="tune-vertical" size={18} color="#8E8E93" />
+          <TouchableOpacity
+            style={styles.modeButton}
+            onPress={() => {
+              fetchCalendarData();
+              setGestureFeedback('🔄 Розклад синхронізовано з сервером');
+            }}
+          >
+            <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -244,8 +274,9 @@ export default function CalendarScreen() {
         </TouchableOpacity>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mastersScroll}>
-          {MOCK_MASTERS.map((master) => {
+          {mastersList.map((master) => {
             const isSelected = selectedMasterId === master.id;
+            const apptCount = appointmentsList.filter((a) => a.masterId === master.id).length;
             return (
               <TouchableOpacity
                 key={master.id}
@@ -261,9 +292,9 @@ export default function CalendarScreen() {
                     {master.specialty}
                   </Text>
                 </View>
-                {master.appointmentCount > 0 && (
+                {apptCount > 0 && (
                   <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>{master.appointmentCount}</Text>
+                    <Text style={styles.countBadgeText}>{apptCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -286,7 +317,7 @@ export default function CalendarScreen() {
 
           {/* Колонки майстрів */}
           {displayedMasters.map((master) => {
-            const appointments = MOCK_APPOINTMENTS.filter((a) => a.masterId === master.id);
+            const appointments = appointmentsList.filter((a) => a.masterId === master.id);
 
             return (
               <View key={master.id} style={styles.masterColumn}>
@@ -295,11 +326,11 @@ export default function CalendarScreen() {
                   <View key={hour} style={[styles.gridRowLine, { height: HOUR_HEIGHT }]} />
                 ))}
 
-                {/* Якщо у майстра немає записів на 10:00 (як у Вероніки на скріншоті) */}
-                {master.id === 'master-1' && (
+                {/* Порожній слот розкладу */}
+                {appointments.length === 0 && (
                   <View style={[styles.emptySlotHatched, { top: 0, height: HOUR_HEIGHT }]}>
                     <MaterialCommunityIcons name="clock-outline" size={14} color="#8E8E93" />
-                    <Text style={styles.addScheduleText}>Додати розклад</Text>
+                    <Text style={styles.addScheduleText}>Вільний день</Text>
                   </View>
                 )}
 
@@ -396,6 +427,19 @@ export default function CalendarScreen() {
             )}
           </Dialog.Content>
           <Dialog.Actions>
+            <Button
+              textColor="#4CAF50"
+              onPress={async () => {
+                if (activeAppointment) {
+                  await apiClient.completeAppointment(activeAppointment.id, { status: 'COMPLETED' });
+                  setGestureFeedback('✓ Статус оновлено через PUT: Візит завершено');
+                  setActiveAppointment(null);
+                  fetchCalendarData();
+                }
+              }}
+            >
+              Завершити візит (PUT)
+            </Button>
             <Button textColor="#C68A2C" onPress={() => setActiveAppointment(null)}>
               Закрити
             </Button>

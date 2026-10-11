@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { Accelerometer } from 'expo-sensors';
 
 interface UseAccelerometerProps {
@@ -25,12 +26,14 @@ export function useAccelerometer({
   const prevX = useRef<number>(0);
 
   useEffect(() => {
-    if (!enabled) return;
+    // На веб-платформі (браузер) акселерометр відсутній
+    if (!enabled || Platform.OS === 'web') return;
 
-    // Встановлюємо частоту опитування сенсора (100мс)
-    Accelerometer.setUpdateInterval(100);
+    try {
+      // Встановлюємо частоту опитування сенсора (100мс)
+      Accelerometer.setUpdateInterval(100);
 
-    const subscription = Accelerometer.addListener(({ x }) => {
+      const subscription = Accelerometer.addListener(({ x }) => {
       const now = Date.now();
       if (now - lastTriggerTime.current < cooldownMs) {
         prevX.current = x;
@@ -45,15 +48,18 @@ export function useAccelerometer({
         lastTriggerTime.current = now;
         onShakeRight();
       }
-      // Рух або плавний нахил ліворуч (x < -threshold або сплеск deltaX < -0.7)
-      else if ((x < -threshold || deltaX < -0.7) && onShakeLeft) {
-        lastTriggerTime.current = now;
-        onShakeLeft();
-      }
-    });
+        // Рух або плавний нахил ліворуч (x < -threshold або сплеск deltaX < -0.7)
+        else if ((x < -threshold || deltaX < -0.7) && onShakeLeft) {
+          lastTriggerTime.current = now;
+          onShakeLeft();
+        }
+      });
 
-    return () => {
-      subscription.remove();
-    };
+      return () => {
+        subscription.remove();
+      };
+    } catch {
+      return undefined;
+    }
   }, [enabled, threshold, cooldownMs, onShakeRight, onShakeLeft]);
 }

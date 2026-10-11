@@ -92,12 +92,12 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
           </View>
         </View>
 
-        {/* Касир */}
+        {/* Адміністратор */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Касир</Text>
+          <Text style={styles.labelCol}>Адміністратор</Text>
           <View style={styles.personBox}>
-            <View style={[styles.avatarDot, { backgroundColor: '#84CC16' }]}>
-              <MaterialCommunityIcons name="account" size={11} color="#FFFFFF" />
+            <View style={[styles.avatarDot, { backgroundColor: '#10B981' }]}>
+              <MaterialCommunityIcons name="shield-account" size={12} color="#FFFFFF" />
             </View>
             <Text style={styles.personName}>{order.cashierName}</Text>
           </View>
