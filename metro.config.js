@@ -222,6 +222,18 @@ config.server = {
                 }
               }
               if (updated) {
+                // Синхронізація: якщо замовлення сплачено, оновлюємо запис у календарі
+                if (updated.status === 'COMPLETED') {
+                  const targetBId = oId.replace('ord-', '');
+                  db.bookings = db.bookings || [];
+                  for (const b of db.bookings) {
+                    if (b.id === targetBId || b.id === `b-${targetBId}`) {
+                      b.hasPayment = true;
+                      b.colorType = 'green';
+                    }
+                  }
+                }
+
                 saveDb(db);
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
                 res.statusCode = 200;

@@ -22,7 +22,7 @@
       "shortName": "Артем Л.",
       "specialty": "Майстер",
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
-      "appointmentCount": 0
+      "appointmentCount": 1
     }
   ],
   "clients": [
@@ -134,6 +134,22 @@
   ],
   "bookings": [
     {
+      "id": "b-1791718866612",
+      "masterId": "master-3",
+      "clientName": "Анонімний клієнт",
+      "clientPhone": "+380 67 000 0000",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "",
+      "date": "2026-10-30",
+      "startTime": "12:00",
+      "endTime": "13:30",
+      "price": 700,
+      "colorType": "green",
+      "hasPayment": true,
+      "hasComment": false,
+      "isConfirmed": true
+    },
+    {
       "id": "b-1791716552358",
       "masterId": "master-1",
       "clientName": "Петросяг",
@@ -176,17 +192,32 @@
       "startTime": "12:00",
       "endTime": "13:30",
       "price": 700,
-      "colorType": "mustard",
-      "hasPayment": false,
+      "colorType": "green",
+      "hasPayment": true,
       "hasComment": false,
       "isConfirmed": true
     }
   ],
   "orders": [
     {
+      "id": "ord-b-1791718866612",
+      "orderNumber": "№1003",
+      "status": "COMPLETED",
+      "date": "2026-10-30 12:00",
+      "clientName": "Анонімний клієнт",
+      "clientPhone": "+380 67 000 0000",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
+    {
       "id": "ord-b-1791716552358",
       "orderNumber": "№1002",
-      "status": "UNPAID",
+      "status": "COMPLETED",
       "date": "2026-10-16 13:00",
       "clientName": "Петросяг",
       "clientPhone": "348405827681",
@@ -216,7 +247,7 @@
     {
       "id": "ord-b-1791711550812",
       "orderNumber": "№1000",
-      "status": "UNPAID",
+      "status": "COMPLETED",
       "date": "2026-10-10 12:00",
       "clientName": "Анонімний клієнт",
       "clientPhone": "+380 67 000 0000",

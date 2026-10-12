@@ -23,6 +23,9 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 }) => {
   // Визначення кольору фону картки за типом
   const getBackgroundColor = () => {
+    if (appointment.hasPayment) {
+      return Colors.cardGreen; // Зелений колір EasyWeek для оплачених візитів
+    }
     switch (appointment.colorType) {
       case 'mustard':
         return Colors.cardMustard;
@@ -58,8 +61,8 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
         <View style={styles.badgesRow}>
           {appointment.hasPayment && (
-            <View style={styles.iconCircle}>
-              <MaterialCommunityIcons name="currency-usd" size={11} color={backgroundColor} />
+            <View style={[styles.iconCircle, { backgroundColor: '#22C55E' }]}>
+              <MaterialCommunityIcons name="currency-usd" size={11} color="#FFFFFF" />
             </View>
           )}
           {appointment.hasComment && (

@@ -359,19 +359,6 @@ export default function NewBookingScreen() {
             onPress={() => setIsMasterModalOpen(true)}
           >
             <View style={styles.dropdownSelectorLeft}>
-              {selectedMaster?.avatarUrl ? (
-                <Image source={{ uri: selectedMaster.avatarUrl }} style={styles.masterAvatarSmall} />
-              ) : selectedMaster ? (
-                <View style={styles.masterAvatarFallback}>
-                  <Text style={styles.masterAvatarLetter}>
-                    {selectedMaster.name.charAt(0)}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.masterAvatarFallback}>
-                  <MaterialCommunityIcons name="account-outline" size={20} color="#8E8E93" />
-                </View>
-              )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.dropdownSelectorMainText}>
                   {selectedMaster ? selectedMaster.name : 'Не обрано'}
@@ -733,9 +720,6 @@ export default function NewBookingScreen() {
                   setIsMasterModalOpen(false);
                 }}
               >
-                <View style={styles.masterAvatarFallbackMedium}>
-                  <MaterialCommunityIcons name="account-outline" size={22} color="#8E8E93" />
-                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.masterModalName, selectedMaster === null && { color: '#34D399' }]}>
                     Не обрано
@@ -761,13 +745,6 @@ export default function NewBookingScreen() {
                       setIsMasterModalOpen(false);
                     }}
                   >
-                    {m.avatarUrl ? (
-                      <Image source={{ uri: m.avatarUrl }} style={styles.masterAvatarMedium} />
-                    ) : (
-                      <View style={styles.masterAvatarFallbackMedium}>
-                        <Text style={styles.masterAvatarLetterMedium}>{m.name.charAt(0)}</Text>
-                      </View>
-                    )}
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.masterModalName, isSelected && { color: '#34D399' }]}>
                         {m.name}

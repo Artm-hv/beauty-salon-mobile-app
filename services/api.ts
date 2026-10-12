@@ -357,8 +357,9 @@ export const apiClient = {
     notes?: string;
     colorType?: 'mustard' | 'green' | 'red' | 'blue';
   }): Promise<{ success: boolean; data: AppointmentItem }> => {
+    const appointmentId = `b-${Date.now()}`;
     const newAppointment: AppointmentItem = {
-      id: `b-${Date.now()}`,
+      id: appointmentId,
       masterId: bookingData.masterId,
       clientName: bookingData.clientName,
       clientPhone: bookingData.clientPhone,
@@ -375,8 +376,9 @@ export const apiClient = {
     };
 
     // Автоматичне створення чека в касі для відповідності операції
+    // Зв'язок: order.id = "ord-{appointmentId}" для синхронізації оплати
     const newOrder: OrderItem = {
-      id: `ord-${Date.now()}`,
+      id: `ord-${appointmentId}`,
       orderNumber: `№${Math.floor(1000 + Math.random() * 9000)}`,
       status: 'UNPAID',
       date: `${bookingData.date} ${bookingData.startTime}`,
@@ -518,6 +520,29 @@ export const apiClient = {
     } catch {}
 
     memoryOrders = memoryOrders.map((ord) => (ord.id === orderId ? { ...ord, status } : ord));
+
+    // Якщо замовлення оплачено — синхронізувати статус у відповідному бронюванні (календарі)
+    if (status === 'COMPLETED') {
+      // Зв'язок: order.id = "ord-{bookingId}"
+      const bookingId = orderId.startsWith('ord-') ? orderId.substring(4) : null;
+      if (bookingId) {
+        try {
+          await fetchWithFallback(`/bookings/${bookingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'COMPLETED' }),
+          });
+        } catch {}
+
+        memoryAppointments = memoryAppointments.map((item) => {
+          if (item.id === bookingId || item.id === `b-${bookingId}`) {
+            return { ...item, hasPayment: true, colorType: 'green' };
+          }
+          return item;
+        });
+      }
+    }
+
     persistState();
     return { success: true };
   },

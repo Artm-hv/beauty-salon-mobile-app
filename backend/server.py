@@ -241,6 +241,14 @@ class ApiHandler(http.server.BaseHTTPRequestHandler):
                     break
 
             if updated:
+                # Синхронізація: якщо замовлення оплачено — відмітити в календарі
+                if updated.get('status') == 'COMPLETED':
+                    target_b_id = order_id.replace('ord-', '')
+                    for b in db.get('bookings', []):
+                        if b.get('id') == target_b_id or b.get('id') == f"b-{target_b_id}":
+                            b['hasPayment'] = True
+                            b['colorType'] = 'green'
+
                 save_db(db)
                 self._send_json(200, {"success": True, "data": updated})
             else:

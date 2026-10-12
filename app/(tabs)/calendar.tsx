@@ -7,6 +7,9 @@ import {
   Dimensions,
   Image,
   PanResponder,
+  Modal,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import {
   Text,
@@ -17,7 +20,7 @@ import {
   Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { AppointmentCard } from '../../components/AppointmentCard';
 import {
@@ -38,14 +41,35 @@ const HOUR_HEIGHT = 85;       // Висота однієї години в пі�
 const COLUMN_WIDTH = 155;     // Ширина колонки майстра
 const TIME_COLUMN_WIDTH = 52; // Ширина шкали годин
 
-// Список днів для нижньої смуги вибору дати
-const DAYS_LIST = [
-  { dayNum: 10, dayName: 'Сб', month: 'Жовт', fullDate: '2026-10-10' },
-  { dayNum: 11, dayName: 'Нд', month: 'Жовт', fullDate: '2026-10-11' },
-  { dayNum: 12, dayName: 'Пн', month: 'Жовт', fullDate: '2026-10-12' },
-  { dayNum: 13, dayName: 'Вт', month: 'Жовт', fullDate: '2026-10-13' },
-  { dayNum: 14, dayName: 'Ср', month: 'Жовт', fullDate: '2026-10-14' },
-];
+// Українські назви днів тижня та місяців для нижньої панелі
+const UKR_DAY_NAMES_SHORT = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const UKR_MONTH_NAMES_SHORT = ['Січ', 'Лют', 'Бер', 'Квіт', 'Трав', 'Черв', 'Лип', 'Серп', 'Вер', 'Жовт', 'Лист', 'Груд'];
+const UKR_MONTH_NAMES_FULL = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+
+// Допоміжна функція для ISO формату дати
+const toIsoDate = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Генерація динамічного списку днів навколо вибраної дати (±3 дні)
+const generateDaysList = (centerDate: string) => {
+  const center = new Date(centerDate + 'T12:00:00');
+  const days = [];
+  for (let offset = -3; offset <= 3; offset++) {
+    const d = new Date(center);
+    d.setDate(d.getDate() + offset);
+    days.push({
+      dayNum: d.getDate(),
+      dayName: UKR_DAY_NAMES_SHORT[d.getDay()],
+      month: UKR_MONTH_NAMES_SHORT[d.getMonth()],
+      fullDate: toIsoDate(d),
+    });
+  }
+  return days;
+};
 
 /**
  * Екран: Календар і розклад майстрів (EasyWeek Dark Edition)
@@ -53,10 +77,88 @@ const DAYS_LIST = [
  * Підключено завантаження та оновлення через REST API (GET, PUT /api/bookings)
  */
 export default function CalendarScreen() {
-  // Вибраний день (за замовчуванням 10 жовтня 2026)
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const router = useRouter();
+
+  // Вибраний день — зберігається як ISO дата (YYYY-MM-DD)
+  const [selectedDate, setSelectedDate] = useState(() => toIsoDate(new Date()));
   const [selectedMasterId, setSelectedMasterId] = useState<string | null>(null);
+
+  // Стан модального вікна вибору дати та місяця
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+  const [pickerMonth, setPickerMonth] = useState(() => new Date().getMonth());
+
+  // Синхронізація горизонтального скролу між панеллю майстрів та колонками сітки
+  const headerScrollRef = useRef<ScrollView>(null);
+  const gridScrollRef = useRef<ScrollView>(null);
+  const isScrollingGrid = useRef(false);
+  const isScrollingHeader = useRef(false);
+
+  const handleGridScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (isScrollingHeader.current) return;
+    isScrollingGrid.current = true;
+    const x = e.nativeEvent.contentOffset.x;
+    headerScrollRef.current?.scrollTo({ x, animated: false });
+    setTimeout(() => {
+      isScrollingGrid.current = false;
+    }, 40);
+  };
+
+  const handleHeaderScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (isScrollingGrid.current) return;
+    isScrollingHeader.current = true;
+    const x = e.nativeEvent.contentOffset.x;
+    gridScrollRef.current?.scrollTo({ x, animated: false });
+    setTimeout(() => {
+      isScrollingHeader.current = false;
+    }, 40);
+  };
+
+  const openDatePicker = () => {
+    try {
+      const d = new Date(selectedDate + 'T12:00:00');
+      setPickerYear(d.getFullYear());
+      setPickerMonth(d.getMonth());
+    } catch {}
+    setIsDatePickerOpen(true);
+  };
+
+  // Генерація сітки днів місяця для модального календаря
+  const monthCalendarDays = useMemo(() => {
+    const firstDay = new Date(pickerYear, pickerMonth, 1);
+    const lastDay = new Date(pickerYear, pickerMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+
+    // Понеділок = 0 ... Неділя = 6
+    const startDayOfWeek = (firstDay.getDay() + 6) % 7;
+    const days: { day: number; dateStr: string; isCurrentMonth: boolean }[] = [];
+
+    // Дні попереднього місяця
+    const prevMonthLastDay = new Date(pickerYear, pickerMonth, 0).getDate();
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const d = prevMonthLastDay - i;
+      const prevDate = new Date(pickerYear, pickerMonth - 1, d);
+      days.push({ day: d, dateStr: toIsoDate(prevDate), isCurrentMonth: false });
+    }
+
+    // Дні поточного місяця
+    for (let d = 1; d <= daysInMonth; d++) {
+      const currDate = new Date(pickerYear, pickerMonth, d);
+      days.push({ day: d, dateStr: toIsoDate(currDate), isCurrentMonth: true });
+    }
+
+    // Дні наступного місяця
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let d = 1; d <= remaining; d++) {
+      const nextDate = new Date(pickerYear, pickerMonth + 1, d);
+      days.push({ day: d, dateStr: toIsoDate(nextDate), isCurrentMonth: false });
+    }
+
+    return days;
+  }, [pickerYear, pickerMonth]);
+
+  // Динамічний список днів навколо вибраної дати
+  const daysList = useMemo(() => generateDaysList(selectedDate), [selectedDate]);
 
   // Стан даних з REST API
   const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
@@ -109,26 +211,26 @@ export default function CalendarScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Функції перемикання дати
+  // Функції перемикання дати (тепер без обмежень)
   const goToNextDay = (source: string = 'Жест') => {
-    setSelectedDayIndex((prev) => {
-      if (prev < DAYS_LIST.length - 1) {
-        const next = prev + 1;
-        setGestureFeedback(`📅 ${DAYS_LIST[next].dayName}, ${DAYS_LIST[next].dayNum} жовт (${source})`);
-        return next;
-      }
-      return prev;
+    setSelectedDate((prev) => {
+      const d = new Date(prev + 'T12:00:00');
+      d.setDate(d.getDate() + 1);
+      const next = toIsoDate(d);
+      const nextDate = new Date(next + 'T12:00:00');
+      setGestureFeedback(`📅 ${UKR_DAY_NAMES_SHORT[nextDate.getDay()]}, ${nextDate.getDate()} ${UKR_MONTH_NAMES_FULL[nextDate.getMonth()]} (${source})`);
+      return next;
     });
   };
 
   const goToPrevDay = (source: string = 'Жест') => {
-    setSelectedDayIndex((prev) => {
-      if (prev > 0) {
-        const next = prev - 1;
-        setGestureFeedback(`📅 ${DAYS_LIST[next].dayName}, ${DAYS_LIST[next].dayNum} жовт (${source})`);
-        return next;
-      }
-      return prev;
+    setSelectedDate((prev) => {
+      const d = new Date(prev + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      const next = toIsoDate(d);
+      const nextDate = new Date(next + 'T12:00:00');
+      setGestureFeedback(`📅 ${UKR_DAY_NAMES_SHORT[nextDate.getDay()]}, ${nextDate.getDate()} ${UKR_MONTH_NAMES_FULL[nextDate.getMonth()]} (${source})`);
+      return next;
     });
   };
 
@@ -172,7 +274,20 @@ export default function CalendarScreen() {
     return { top, height };
   };
 
-  const currentSelectedDay = DAYS_LIST[selectedDayIndex];
+  // Розбір вибраної дати для заголовка
+  const selectedDateObj = useMemo(() => {
+    const d = new Date(selectedDate + 'T12:00:00');
+    return {
+      dayNum: d.getDate(),
+      monthName: UKR_MONTH_NAMES_FULL[d.getMonth()],
+      year: d.getFullYear(),
+    };
+  }, [selectedDate]);
+
+  // Фільтрація записів за вибраною датою (прив'язка сітки до дати)
+  const filteredAppointments = useMemo(() => {
+    return appointmentsList.filter((a) => a.date === selectedDate);
+  }, [appointmentsList, selectedDate]);
 
   // Фільтрація майстрів для відображення
   const displayedMasters = useMemo(() => {
@@ -184,29 +299,28 @@ export default function CalendarScreen() {
 
   return (
     <View style={styles.rootContainer}>
-      {/* 1. ВЕРХНЯ ШАПКА: Заголовок дати + Стрілочки навігації + Перемикачі режимів */}
+      {/* 1. ВЕРХНЯ ШАПКА: Заголовок дати + Стрілочки навігації + Кнопка оновлення */}
       <View style={styles.headerRow} {...panResponder.panHandlers}>
         <View style={styles.dateNavGroup}>
           <TouchableOpacity
             style={styles.dateNavArrow}
             onPress={() => goToPrevDay('Стрілка')}
-            disabled={selectedDayIndex === 0}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
               name="chevron-left"
               size={24}
-              color={selectedDayIndex === 0 ? '#444448' : '#FFFFFF'}
+              color="#FFFFFF"
             />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.dateDropdownButton}
             activeOpacity={0.8}
-            onPress={() => setGestureFeedback('Підказка: свайпніть або злегка нахиліть телефон вліво/вправо')}
+            onPress={openDatePicker}
           >
             <Text style={styles.dateDropdownText}>
-              {currentSelectedDay.dayNum} жовтня
+              {selectedDateObj.dayNum} {selectedDateObj.monthName}
             </Text>
             <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -214,82 +328,69 @@ export default function CalendarScreen() {
           <TouchableOpacity
             style={styles.dateNavArrow}
             onPress={() => goToNextDay('Стрілка')}
-            disabled={selectedDayIndex === DAYS_LIST.length - 1}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
               name="chevron-right"
               size={24}
-              color={selectedDayIndex === DAYS_LIST.length - 1 ? '#444448' : '#FFFFFF'}
+              color="#FFFFFF"
             />
           </TouchableOpacity>
         </View>
 
-        {/* Кнопки режимів (Сітка, Список, Оновити) */}
-        <View style={styles.modeButtonGroup}>
-          <TouchableOpacity
-            style={[styles.modeButton, viewMode === 'grid' && styles.modeButtonActive]}
-            onPress={() => setViewMode('grid')}
-          >
-            <MaterialCommunityIcons
-              name="view-grid-outline"
-              size={18}
-              color={viewMode === 'grid' ? '#FFFFFF' : '#8E8E93'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.modeButton, viewMode === 'list' && styles.modeButtonActive]}
-            onPress={() => setViewMode('list')}
-          >
-            <MaterialCommunityIcons
-              name="format-list-bulleted"
-              size={18}
-              color={viewMode === 'list' ? '#FFFFFF' : '#8E8E93'}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.modeButton}
-            onPress={() => {
-              fetchCalendarData();
-              setGestureFeedback('🔄 Розклад синхронізовано з сервером');
-            }}
-          >
-            <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        {/* Кнопка оновлення даних з сервера */}
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={() => {
+            fetchCalendarData();
+            setGestureFeedback('🔄 Розклад синхронізовано з сервером');
+          }}
+        >
+          <MaterialCommunityIcons name="refresh" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
-      {/* 2. ПАНЕЛЬ МАЙСТРІВ З АВАТАРАМИ ТА БЕЙДЖАМИ КІЛЬКОСТІ */}
+      {/* 2. ПАНЕЛЬ МАЙСТРІВ З АВАТАРАМИ ТА БЕЙДЖАМИ КІЛЬКОСТІ (Синхронізована з сіткою) */}
       <View style={styles.mastersHeaderBar}>
-        {/* Кнопка "Усі майстри / Група" */}
+        {/* Кнопка "Усі майстри / Група" (вирівняна над шкалою годин 52px) */}
         <TouchableOpacity
           style={styles.groupIconContainer}
-          onPress={() => setSelectedMasterId(null)}
+          onPress={() => {
+            setSelectedMasterId(null);
+            headerScrollRef.current?.scrollTo({ x: 0, animated: true });
+            gridScrollRef.current?.scrollTo({ x: 0, animated: true });
+          }}
         >
           <View style={styles.groupCircle}>
             <MaterialCommunityIcons name="account-group" size={16} color="#FFFFFF" />
           </View>
         </TouchableOpacity>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mastersScroll}>
-          {mastersList.map((master) => {
+        <ScrollView
+          ref={headerScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleHeaderScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.mastersScroll}
+        >
+          {mastersList.map((master, index) => {
             const isSelected = selectedMasterId === master.id;
-            const apptCount = appointmentsList.filter((a) => a.masterId === master.id).length;
+            const apptCount = filteredAppointments.filter((a) => a.masterId === master.id).length;
             return (
               <TouchableOpacity
                 key={master.id}
                 style={[styles.masterHeaderItem, isSelected && styles.masterHeaderItemActive]}
-                onPress={() => setSelectedMasterId(isSelected ? null : master.id)}
+                onPress={() => {
+                  const newId = isSelected ? null : master.id;
+                  setSelectedMasterId(newId);
+                  headerScrollRef.current?.scrollTo({ x: index * COLUMN_WIDTH, animated: true });
+                  gridScrollRef.current?.scrollTo({ x: index * COLUMN_WIDTH, animated: true });
+                }}
               >
-                <Image source={{ uri: master.avatarUrl }} style={styles.masterAvatar} />
                 <View style={styles.masterTextInfo}>
                   <Text numberOfLines={1} style={styles.masterNameText}>
-                    {master.shortName}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.masterSpecialtyText}>
-                    {master.specialty}
+                    {master.name}
                   </Text>
                 </View>
                 {apptCount > 0 && (
@@ -303,9 +404,16 @@ export default function CalendarScreen() {
         </ScrollView>
       </View>
 
-      {/* 3. ОСНОВНА СІТКА РОЗКЛАДУ */}
+      {/* 3. ОСНОВНА СІТКА РОЗКЛАДУ (Синхронізована з панеллю майстрів) */}
       <ScrollView style={styles.verticalScroll} contentContainerStyle={styles.verticalScrollContent}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
+        <ScrollView
+          ref={gridScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          onScroll={handleGridScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.horizontalScroll}
+        >
           {/* Ліва шкала годин (10:00 - 21:00) */}
           <View style={styles.timeScaleColumn}>
             {HOURS.map((hour) => (
@@ -317,7 +425,7 @@ export default function CalendarScreen() {
 
           {/* Колонки майстрів */}
           {displayedMasters.map((master) => {
-            const appointments = appointmentsList.filter((a) => a.masterId === master.id);
+            const appointments = filteredAppointments.filter((a) => a.masterId === master.id);
 
             return (
               <View key={master.id} style={styles.masterColumn}>
@@ -326,12 +434,20 @@ export default function CalendarScreen() {
                   <View key={hour} style={[styles.gridRowLine, { height: HOUR_HEIGHT }]} />
                 ))}
 
-                {/* Порожній слот розкладу */}
+                {/* Порожній слот розкладу — натискання переходить до запису цього майстра */}
                 {appointments.length === 0 && (
-                  <View style={[styles.emptySlotHatched, { top: 0, height: HOUR_HEIGHT }]}>
-                    <MaterialCommunityIcons name="clock-outline" size={14} color="#8E8E93" />
-                    <Text style={styles.addScheduleText}>Вільний день</Text>
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.emptySlotHatched, { top: 0, height: HOUR_HEIGHT }]}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/(tabs)/new-booking',
+                        params: { masterId: master.id },
+                      });
+                    }}
+                  >
+                    <MaterialCommunityIcons name="plus-circle-outline" size={14} color="#8E8E93" />
+                    <Text style={styles.addScheduleText}>Вільний день (+)</Text>
+                  </TouchableOpacity>
                 )}
 
                 {/* Картки візитів, абсолютно позиціоновані за точним часом */}
@@ -364,16 +480,16 @@ export default function CalendarScreen() {
         </ScrollView>
       </ScrollView>
 
-      {/* 4. НИЖНЯ ПЛАВАЮЧА ПАНЕЛЬ ВИБОРУ ДНЯ (Жовт Сб, 10 | Нд, 11...) */}
+      {/* 4. НИЖНЯ ПЛАВАЮЧА ПАНЕЛЬ ВИБОРУ ДНЯ (динамічна навколо вибраної дати) */}
       <View style={styles.bottomDateDock} {...panResponder.panHandlers}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomDateScroll}>
-          {DAYS_LIST.map((item, index) => {
-            const isActive = selectedDayIndex === index;
+          {daysList.map((item) => {
+            const isActive = selectedDate === item.fullDate;
             return (
               <TouchableOpacity
-                key={item.dayNum}
+                key={item.fullDate}
                 style={[styles.datePill, isActive && styles.datePillActive]}
-                onPress={() => setSelectedDayIndex(index)}
+                onPress={() => setSelectedDate(item.fullDate)}
               >
                 <Text style={[styles.datePillMonth, isActive && styles.datePillMonthActive]}>
                   {item.month}
@@ -386,9 +502,9 @@ export default function CalendarScreen() {
             );
           })}
 
-          {/* Іконка фільтра справа */}
-          <TouchableOpacity style={styles.bottomFilterButton}>
-            <MaterialCommunityIcons name="tune-variant" size={20} color="#FFFFFF" />
+          {/* Іконка календаря справа — відкриває вибір будь-якої дати та місяця */}
+          <TouchableOpacity style={styles.bottomFilterButton} onPress={openDatePicker}>
+            <MaterialCommunityIcons name="calendar-month-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -418,6 +534,14 @@ export default function CalendarScreen() {
                 <Text style={styles.dialogText}>
                   💰 <Text style={styles.dialogBold}>Ціна:</Text> {activeAppointment.price} ₴
                 </Text>
+                <Text style={styles.dialogText}>
+                  💳 <Text style={styles.dialogBold}>Статус оплати:</Text>{' '}
+                  {activeAppointment.hasPayment ? (
+                    <Text style={{ color: '#4CAF50', fontWeight: '700' }}>✓ Сплачено в касі</Text>
+                  ) : (
+                    <Text style={{ color: '#F59E0B', fontWeight: '700' }}>⏳ Очікує оплати</Text>
+                  )}
+                </Text>
                 {activeAppointment.notes && (
                   <Text style={styles.dialogText}>
                     📝 <Text style={styles.dialogBold}>Примітки:</Text> {activeAppointment.notes}
@@ -446,6 +570,119 @@ export default function CalendarScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Модальне вікно вибору дати та місяця */}
+      <Modal visible={isDatePickerOpen} transparent animationType="fade">
+        <View style={styles.datePickerOverlay}>
+          <View style={styles.datePickerCard}>
+            {/* Шапка календаря з перемикачем місяців */}
+            <View style={styles.datePickerHeader}>
+              <TouchableOpacity
+                style={styles.monthNavBtn}
+                onPress={() => {
+                  setPickerMonth((prev) => {
+                    if (prev === 0) {
+                      setPickerYear((y) => y - 1);
+                      return 11;
+                    }
+                    return prev - 1;
+                  });
+                }}
+              >
+                <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              <Text style={styles.datePickerTitle}>
+                {UKR_MONTH_NAMES_FULL[pickerMonth]} {pickerYear}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.monthNavBtn}
+                onPress={() => {
+                  setPickerMonth((prev) => {
+                    if (prev === 11) {
+                      setPickerYear((y) => y + 1);
+                      return 0;
+                    }
+                    return prev + 1;
+                  });
+                }}
+              >
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Дні тижня */}
+            <View style={styles.weekDaysRow}>
+              {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'].map((day) => (
+                <Text key={day} style={styles.weekDayText}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            {/* Сітка днів місяця */}
+            <View style={styles.monthGrid}>
+              {monthCalendarDays.map((cell, idx) => {
+                const isSelected = cell.dateStr === selectedDate;
+                const isToday = cell.dateStr === toIsoDate(new Date());
+
+                return (
+                  <TouchableOpacity
+                    key={`${cell.dateStr}-${idx}`}
+                    style={[
+                      styles.calendarDayCell,
+                      isSelected && styles.calendarDayCellSelected,
+                      isToday && !isSelected && styles.calendarDayCellToday,
+                    ]}
+                    onPress={() => {
+                      setSelectedDate(cell.dateStr);
+                      setIsDatePickerOpen(false);
+                      const dObj = new Date(cell.dateStr + 'T12:00:00');
+                      setGestureFeedback(
+                        `📅 ${cell.day} ${UKR_MONTH_NAMES_FULL[dObj.getMonth()]} ${dObj.getFullYear()}`
+                      );
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        !cell.isCurrentMonth && styles.calendarDayTextDimmed,
+                        isSelected && styles.calendarDayTextSelected,
+                        isToday && !isSelected && styles.calendarDayTextToday,
+                      ]}
+                    >
+                      {cell.day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Швидкі кнопки */}
+            <View style={styles.datePickerActionsRow}>
+              <TouchableOpacity
+                style={styles.quickDateBtn}
+                onPress={() => {
+                  const todayStr = toIsoDate(new Date());
+                  setSelectedDate(todayStr);
+                  setIsDatePickerOpen(false);
+                  setGestureFeedback('📅 Сьогодні');
+                }}
+              >
+                <Text style={styles.quickDateBtnText}>Сьогодні</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.datePickerCloseBtn}
+                onPress={() => setIsDatePickerOpen(false)}
+              >
+                <Text style={styles.datePickerCloseBtnText}>Закрити</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Сповіщення зворотного зв'язку жестів / акселерометра */}
       <Snackbar
@@ -496,19 +733,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.4,
   },
-  modeButtonGroup: {
-    flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
+  refreshButton: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    padding: 3,
-  },
-  modeButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  modeButtonActive: {
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // 2. Панель майстрів
@@ -539,34 +770,25 @@ const styles = StyleSheet.create({
   masterHeaderItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#121212',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
+    backgroundColor: '#161618',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#242426',
     width: 145,
   },
   masterHeaderItemActive: {
     borderColor: '#C68A2C',
-  },
-  masterAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    marginRight: 6,
+    backgroundColor: '#222226',
   },
   masterTextInfo: {
     flex: 1,
   },
   masterNameText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  masterSpecialtyText: {
-    color: '#8E8E93',
-    fontSize: 9.5,
+    fontSize: 12,
+    fontWeight: '700',
   },
   countBadge: {
     backgroundColor: '#2C2C2E',
@@ -755,5 +977,127 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
     textAlign: 'center',
+  },
+
+  // Модальне вікно вибору дати та місяця
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  datePickerCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  monthNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2C2C2E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  weekDaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  weekDayText: {
+    width: 38,
+    textAlign: 'center',
+    color: '#8E8E93',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  calendarDayCell: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  calendarDayCellSelected: {
+    backgroundColor: '#C68A2C',
+  },
+  calendarDayCellToday: {
+    borderWidth: 1.5,
+    borderColor: '#4CAF50',
+  },
+  calendarDayText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  calendarDayTextDimmed: {
+    color: '#48484A',
+  },
+  calendarDayTextSelected: {
+    color: '#000000',
+    fontWeight: '700',
+  },
+  calendarDayTextToday: {
+    color: '#4CAF50',
+    fontWeight: '700',
+  },
+  datePickerActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#2C2C2E',
+  },
+  quickDateBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#2C2C2E',
+  },
+  quickDateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  datePickerCloseBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#C68A2C',
+  },
+  datePickerCloseBtnText: {
+    color: '#000000',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

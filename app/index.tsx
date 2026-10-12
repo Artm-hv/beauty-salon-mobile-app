@@ -84,7 +84,7 @@ export default function LoginScreen() {
             <MaterialCommunityIcons name="spa" size={44} color={Colors.primary} />
           </View>
           <Text variant="headlineMedium" style={styles.title}>
-            Svoya Nail Studio
+            NAIL STUDIO
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
             Система управління салоном краси
@@ -155,19 +155,6 @@ export default function LoginScreen() {
             textColor="#000000"
           >
             Увійти
-          </Button>
-
-          <Button
-            mode="outlined"
-            icon="lightning-bolt"
-            onPress={() => {
-              authService.setCurrentUser(DEMO_ACCOUNTS.master);
-              router.replace('/(tabs)/calendar');
-            }}
-            style={styles.guestButton}
-            textColor={Colors.text}
-          >
-            Миттєвий вхід без пароля (Майстер)
           </Button>
 
           <TouchableOpacity
