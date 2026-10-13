@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { TextInput, Button, Text, Surface, HelperText, IconButton } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/colors';
+import { useAppSettings } from '../context/AppSettingsContext';
 import { authService } from '../services/authService';
 
 /**
@@ -11,6 +11,7 @@ import { authService } from '../services/authService';
  */
 export default function RegisterScreen() {
   const router = useRouter();
+  const { colors, t, language } = useAppSettings();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -36,23 +37,23 @@ export default function RegisterScreen() {
     setErrorMessage('');
 
     if (!firstName.trim() || !lastName.trim()) {
-      setErrorMessage("Введіть ім'я та прізвище");
+      setErrorMessage(t.auth.validationEmptyName);
       return;
     }
     if (!phone.trim()) {
-      setErrorMessage('Введіть контактний номер телефону');
+      setErrorMessage(t.auth.validationEmptyPhone);
       return;
     }
     if (!email.trim() || !isEmailValid()) {
-      setErrorMessage('Введіть коректну електронну пошту');
+      setErrorMessage(t.auth.validationEmail);
       return;
     }
     if (!password || password.length < 6) {
-      setErrorMessage('Пароль повинен містити щонайменше 6 символів');
+      setErrorMessage(t.auth.validationPasswordMin);
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMessage('Введені паролі не співпадають');
+      setErrorMessage(t.auth.validationPasswordMatch);
       return;
     }
 
@@ -71,91 +72,102 @@ export default function RegisterScreen() {
         // Новий акаунт створено зі статусом PENDING -> переходимо на екран очікування ролі
         router.replace('/waiting-role');
       } else {
-        setErrorMessage(result.error || 'Помилка при реєстрації');
+        setErrorMessage(result.error || (language === 'pl' ? 'Błąd rejestracji' : 'Помилка при реєстрації'));
       }
     } catch {
       setLoading(false);
-      setErrorMessage('Не вдалося з’єднатися з сервером реєстрації');
+      setErrorMessage(language === 'pl' ? 'Nie udało się połączyć z serwerem' : 'Не вдалося з’єднатися з сервером реєстрації');
     }
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardContainer}
+      style={[styles.keyboardContainer, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.topBar}>
           <IconButton
             icon="arrow-left"
             size={24}
+            iconColor={colors.text}
             onPress={() => router.back()}
             style={styles.backButton}
           />
         </View>
 
-        <Surface style={styles.formCard} elevation={2}>
-          <Text variant="headlineSmall" style={styles.formTitle}>
-            Реєстрація фахівця
+        <Surface
+          style={[
+            styles.formCard,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
+          ]}
+          elevation={2}
+        >
+          <Text variant="headlineSmall" style={[styles.formTitle, { color: colors.text }]}>
+            {t.auth.registerTitle}
           </Text>
-          <Text variant="bodyMedium" style={styles.formSubtitle}>
-            Створіть обліковий запис для роботи в салоні
+          <Text variant="bodyMedium" style={[styles.formSubtitle, { color: colors.textSecondary }]}>
+            {t.auth.systemSubtitle}
           </Text>
 
           <View style={styles.row}>
             <TextInput
-              label="Ім'я"
+              label={t.auth.firstNameLabel}
               value={firstName}
               onChangeText={setFirstName}
               mode="outlined"
-              style={[styles.input, styles.halfInput]}
-              outlineColor={Colors.cardBorder}
-              activeOutlineColor={Colors.primary}
+              style={[styles.input, styles.halfInput, { backgroundColor: colors.surface }]}
+              textColor={colors.text}
+              outlineColor={colors.cardBorder}
+              activeOutlineColor={colors.primary}
             />
             <TextInput
-              label="Прізвище"
+              label={t.auth.lastNameLabel}
               value={lastName}
               onChangeText={setLastName}
               mode="outlined"
-              style={[styles.input, styles.halfInput]}
-              outlineColor={Colors.cardBorder}
-              activeOutlineColor={Colors.primary}
+              style={[styles.input, styles.halfInput, { backgroundColor: colors.surface }]}
+              textColor={colors.text}
+              outlineColor={colors.cardBorder}
+              activeOutlineColor={colors.primary}
             />
           </View>
 
           <TextInput
-            label="Номер телефону"
+            label={t.auth.phoneLabel}
             value={phone}
             onChangeText={setPhone}
             mode="outlined"
             keyboardType="phone-pad"
             left={<TextInput.Icon icon="phone-outline" />}
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
             placeholder="+380..."
           />
 
           <TextInput
-            label="Електронна пошта"
+            label={t.auth.emailLabel}
             value={email}
             onChangeText={setEmail}
             mode="outlined"
             keyboardType="email-address"
             autoCapitalize="none"
             left={<TextInput.Icon icon="email-outline" />}
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
           />
           {!isEmailValid() && (
             <HelperText type="error" visible={!isEmailValid()}>
-              Некоректний формат email
+              {t.auth.validationEmail}
             </HelperText>
           )}
 
           <TextInput
-            label="Пароль"
+            label={t.auth.passwordLabel}
             value={password}
             onChangeText={setPassword}
             mode="outlined"
@@ -167,25 +179,27 @@ export default function RegisterScreen() {
                 onPress={() => setIsPasswordVisible(!isPasswordVisible)}
               />
             }
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
           />
 
           <TextInput
-            label="Підтвердження пароля"
+            label={t.auth.confirmPasswordLabel}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             mode="outlined"
             secureTextEntry={!isPasswordVisible}
             left={<TextInput.Icon icon="lock-check-outline" />}
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
           />
           {!isPasswordMatch() && (
             <HelperText type="error" visible={!isPasswordMatch()}>
-              Паролі не співпадають
+              {t.auth.validationPasswordMatch}
             </HelperText>
           )}
 
@@ -202,18 +216,19 @@ export default function RegisterScreen() {
             disabled={loading}
             style={styles.registerButton}
             contentStyle={styles.buttonContent}
-            buttonColor={Colors.primary}
+            buttonColor={colors.primary}
+            textColor="#000000"
           >
-            Створити обліковий запис
+            {t.auth.registerButton}
           </Button>
 
           <TouchableOpacity
             style={styles.loginLink}
             onPress={() => router.back()}
           >
-            <Text variant="bodyMedium" style={styles.loginText}>
-              Вже є обліковий запис?{' '}
-              <Text style={styles.loginTextHighlight}>Увійти</Text>
+            <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
+              {t.auth.alreadyAccount}{' '}
+              <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t.auth.loginButton}</Text>
             </Text>
           </TouchableOpacity>
         </Surface>
@@ -225,7 +240,6 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -242,14 +256,11 @@ const styles = StyleSheet.create({
   formCard: {
     padding: 22,
     borderRadius: 16,
-    backgroundColor: Colors.surface,
   },
   formTitle: {
     fontWeight: 'bold',
-    color: Colors.text,
   },
   formSubtitle: {
-    color: Colors.textSecondary,
     marginTop: 4,
     marginBottom: 20,
   },
@@ -262,7 +273,6 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 12,
-    backgroundColor: Colors.surface,
   },
   errorText: {
     marginBottom: 8,
@@ -277,12 +287,5 @@ const styles = StyleSheet.create({
   loginLink: {
     marginTop: 18,
     alignItems: 'center',
-  },
-  loginText: {
-    color: Colors.textSecondary,
-  },
-  loginTextHighlight: {
-    color: Colors.primary,
-    fontWeight: 'bold',
   },
 });

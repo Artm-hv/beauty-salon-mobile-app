@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Touchable
 import { TextInput, Button, Text, Surface, HelperText, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/colors';
+import { useAppSettings } from '../context/AppSettingsContext';
 import { authService, DEMO_ACCOUNTS } from '../services/authService';
 
 /**
@@ -12,6 +12,7 @@ import { authService, DEMO_ACCOUNTS } from '../services/authService';
  */
 export default function LoginScreen() {
   const router = useRouter();
+  const { colors, t, language, setLanguage, isDark, toggleTheme } = useAppSettings();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -29,15 +30,15 @@ export default function LoginScreen() {
     setErrorMessage('');
 
     if (!email.trim()) {
-      setErrorMessage('Введіть адресу електронної пошти');
+      setErrorMessage(t.auth.validationEmptyEmail);
       return;
     }
     if (!isEmailValid()) {
-      setErrorMessage('Введіть коректну адресу електронної пошти');
+      setErrorMessage(t.auth.validationEmail);
       return;
     }
     if (!password) {
-      setErrorMessage('Введіть пароль');
+      setErrorMessage(t.auth.validationEmptyPassword);
       return;
     }
 
@@ -55,11 +56,11 @@ export default function LoginScreen() {
           router.replace('/(tabs)/calendar');
         }
       } else {
-        setErrorMessage(result.error || 'Помилка авторизації');
+        setErrorMessage(result.error || (language === 'pl' ? 'Błąd autoryzacji' : 'Помилка авторизації'));
       }
     } catch {
       setLoading(false);
-      setErrorMessage('Не вдалося з’єднатися з сервером');
+      setErrorMessage(language === 'pl' ? 'Nie udało się połączyć z serwerem' : 'Не вдалося з’єднатися з сервером');
     }
   };
 
@@ -76,28 +77,58 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardContainer}
+      style={[styles.keyboardContainer, { backgroundColor: colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Верхній блок швидкого перемикання мови та теми на екрані входу */}
+        <View style={styles.topUtilityRow}>
+          <TouchableOpacity
+            style={[styles.langToggleBtn, { backgroundColor: colors.surface, borderColor: colors.cardBorder }]}
+            onPress={() => setLanguage(language === 'pl' ? 'ua' : 'pl')}
+          >
+            <MaterialCommunityIcons name="translate" size={16} color={colors.text} />
+            <Text style={[styles.langToggleText, { color: colors.text }]}>
+              {language.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.themeToggleBtn, { backgroundColor: colors.surface, borderColor: colors.cardBorder }]}
+            onPress={toggleTheme}
+          >
+            <MaterialCommunityIcons
+              name={isDark ? 'weather-night' : 'weather-sunny'}
+              size={18}
+              color={isDark ? '#F59E0B' : '#EAB308'}
+            />
+          </TouchableOpacity>
+        </View>
+
         <Surface style={styles.headerBox} elevation={0}>
-          <View style={styles.logoCircle}>
-            <MaterialCommunityIcons name="spa" size={44} color={Colors.primary} />
+          <View style={[styles.logoCircle, { backgroundColor: colors.surfaceLight }]}>
+            <MaterialCommunityIcons name="spa" size={44} color={colors.primary} />
           </View>
-          <Text variant="headlineMedium" style={styles.title}>
-            NAIL STUDIO
+          <Text variant="headlineMedium" style={[styles.title, { color: colors.text }]}>
+            {t.auth.systemTitle}
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Система управління салоном краси
+          <Text variant="bodyMedium" style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {t.auth.systemSubtitle}
           </Text>
         </Surface>
 
-        <Surface style={styles.formCard} elevation={2}>
-          <Text variant="titleMedium" style={styles.formTitle}>
-            Вхід у кабінет працівника
+        <Surface
+          style={[
+            styles.formCard,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
+          ]}
+          elevation={2}
+        >
+          <Text variant="titleMedium" style={[styles.formTitle, { color: colors.text }]}>
+            {t.auth.loginTitle}
           </Text>
 
           <TextInput
-            label="Електронна пошта"
+            label={t.auth.emailLabel}
             value={email}
             onChangeText={(text) => {
               setEmail(text);
@@ -107,18 +138,19 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             left={<TextInput.Icon icon="email-outline" />}
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
           />
           {!isEmailValid() && (
             <HelperText type="error" visible={!isEmailValid()}>
-              Некоректний формат email
+              {t.auth.validationEmail}
             </HelperText>
           )}
 
           <TextInput
-            label="Пароль"
+            label={t.auth.passwordLabel}
             value={password}
             onChangeText={(text) => {
               setPassword(text);
@@ -133,9 +165,10 @@ export default function LoginScreen() {
                 onPress={() => setIsPasswordVisible(!isPasswordVisible)}
               />
             }
-            style={styles.input}
-            outlineColor={Colors.cardBorder}
-            activeOutlineColor={Colors.primary}
+            style={[styles.input, { backgroundColor: colors.surface }]}
+            textColor={colors.text}
+            outlineColor={colors.cardBorder}
+            activeOutlineColor={colors.primary}
           />
 
           {!!errorMessage && (
@@ -151,56 +184,66 @@ export default function LoginScreen() {
             disabled={loading}
             style={styles.loginButton}
             contentStyle={styles.buttonContent}
-            buttonColor={Colors.primary}
+            buttonColor={colors.primary}
             textColor="#000000"
           >
-            Увійти
+            {t.auth.loginButton}
           </Button>
 
           <TouchableOpacity
             style={styles.registerLink}
             onPress={() => router.push('/register')}
           >
-            <Text variant="bodyMedium" style={styles.registerText}>
-              Немає облікового запису?{' '}
-              <Text style={styles.registerTextHighlight}>Зареєструватися</Text>
+            <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
+              {t.auth.noAccount}{' '}
+              <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{t.auth.registerLink}</Text>
             </Text>
           </TouchableOpacity>
         </Surface>
 
         {/* Швидкі кнопки демо-входу для показу викладачу */}
-        <Surface style={styles.demoSection} elevation={1}>
-          <Text variant="labelMedium" style={styles.demoTitle}>
-            ⚡ Швидкий демо-вхід для захисту проєкту:
+        <Surface
+          style={[
+            styles.demoSection,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
+          ]}
+          elevation={1}
+        >
+          <Text variant="labelMedium" style={[styles.demoTitle, { color: colors.textSecondary }]}>
+            {t.auth.demoTitle}
           </Text>
           <View style={styles.demoChipsRow}>
             <Chip
               icon="account"
               onPress={() => fillDemoCredentials('master')}
-              style={styles.chip}
+              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
+              textStyle={{ color: colors.text }}
             >
               Артем Г.
             </Chip>
             <Chip
               icon="account"
               onPress={() => fillDemoCredentials('ihor')}
-              style={styles.chip}
+              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
+              textStyle={{ color: colors.text }}
             >
               Ігор Н.
             </Chip>
             <Chip
               icon="account"
               onPress={() => fillDemoCredentials('labunskyi')}
-              style={styles.chip}
+              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
+              textStyle={{ color: colors.text }}
             >
               Артем Л.
             </Chip>
             <Chip
               icon="shield-account"
               onPress={() => fillDemoCredentials('admin')}
-              style={styles.chip}
+              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
+              textStyle={{ color: colors.text }}
             >
-              Адмін
+              {language === 'pl' ? 'Admin' : 'Адмін'}
             </Chip>
           </View>
         </Surface>
@@ -212,12 +255,39 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   scrollContent: {
     flexGrow: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  topUtilityRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  langToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  langToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  themeToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
   },
   headerBox: {
     alignItems: 'center',
@@ -228,32 +298,26 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#F3E8FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
   title: {
     fontWeight: 'bold',
-    color: Colors.primaryDark,
   },
   subtitle: {
-    color: Colors.textSecondary,
     marginTop: 4,
   },
   formCard: {
     padding: 22,
     borderRadius: 16,
-    backgroundColor: Colors.surface,
   },
   formTitle: {
     fontWeight: 'bold',
-    color: Colors.text,
     marginBottom: 16,
   },
   input: {
     marginBottom: 12,
-    backgroundColor: Colors.surface,
   },
   errorText: {
     marginBottom: 8,
@@ -262,11 +326,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 10,
   },
-  guestButton: {
-    marginTop: 10,
-    borderRadius: 10,
-    borderColor: Colors.cardBorder,
-  },
   buttonContent: {
     paddingVertical: 6,
   },
@@ -274,22 +333,13 @@ const styles = StyleSheet.create({
     marginTop: 18,
     alignItems: 'center',
   },
-  registerText: {
-    color: Colors.textSecondary,
-  },
-  registerTextHighlight: {
-    color: Colors.primary,
-    fontWeight: 'bold',
-  },
   demoSection: {
     marginTop: 20,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
   },
   demoTitle: {
-    color: Colors.textSecondary,
     marginBottom: 8,
   },
   demoChipsRow: {
@@ -299,6 +349,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chip: {
-    backgroundColor: '#F3E8FF',
+    borderRadius: 16,
   },
 });

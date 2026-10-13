@@ -87,6 +87,20 @@ config.server = {
               res.end(JSON.stringify(db.masters || []));
               return;
             }
+            if (pathname === '/api/users') {
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.statusCode = 200;
+              res.end(JSON.stringify(db.users || []));
+              return;
+            }
+            if (pathname.startsWith('/api/users/')) {
+              const uId = pathname.replace('/api/users/', '');
+              const user = (db.users || []).find((u) => u.id === uId);
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.statusCode = user ? 200 : 404;
+              res.end(JSON.stringify(user || { error: 'User not found' }));
+              return;
+            }
             if (pathname === '/api/health') {
               res.setHeader('Content-Type', 'application/json; charset=utf-8');
               res.statusCode = 200;
@@ -148,6 +162,23 @@ config.server = {
               res.end(JSON.stringify(data));
               return;
             }
+            if (pathname === '/api/auth/register' || pathname === '/api/users') {
+              db.users = db.users || [];
+              const newUser = {
+                id: data.id || `user-${Date.now()}`,
+                firstName: data.firstName || '',
+                lastName: data.lastName || '',
+                email: (data.email || '').toLowerCase(),
+                phone: data.phone || '',
+                role: data.role || 'PENDING',
+              };
+              db.users.unshift(newUser);
+              saveDb(db);
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.statusCode = 201;
+              res.end(JSON.stringify({ success: true, user: newUser }));
+              return;
+            }
             if (pathname === '/api/reset') {
               const defaultData = {
                 masters: [
@@ -199,6 +230,25 @@ config.server = {
                   if (data.status === 'COMPLETED') b.hasPayment = true;
                   if (data.notes) b.notes = data.notes;
                   updated = b;
+                  break;
+                }
+              }
+              if (updated) {
+                saveDb(db);
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                res.statusCode = 200;
+                res.end(JSON.stringify({ success: true, data: updated }));
+                return;
+              }
+            }
+            if (pathname.startsWith('/api/users/')) {
+              const uId = pathname.replace('/api/users/', '').split('/')[0];
+              db.users = db.users || [];
+              let updated = null;
+              for (const u of db.users) {
+                if (u.id === uId) {
+                  if (data.role) u.role = data.role;
+                  updated = u;
                   break;
                 }
               }
