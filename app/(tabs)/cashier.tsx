@@ -15,6 +15,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { OrderCard } from '../../components/OrderCard';
 import { OrderItem } from '../../services/mockData';
 import { apiClient } from '../../services/api';
+import { useAppSettings } from '../../context/AppSettingsContext';
+import { authService } from '../../services/authService';
 
 type OrderStatusTab = 'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED';
 
@@ -25,9 +27,20 @@ type OrderStatusTab = 'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED';
  */
 export default function CashierScreen() {
   const router = useRouter();
+  const { colors, t, language } = useAppSettings();
+  const currentUser = authService.getCurrentUser();
+  const currentRawName = currentUser
+    ? (currentUser.name || `${currentUser.firstName} ${currentUser.lastName}`.trim())
+    : 'Адміністратор салону';
+  const currentUserName = currentUser
+    ? `${currentRawName} (${currentUser.role === 'ADMIN' ? (language === 'pl' ? 'Administrator' : 'Адміністратор') : (language === 'pl' ? 'Mistrz' : 'Майстер')})`
+    : 'Адміністратор салону';
+
   const [activeTab, setActiveTab] = useState<OrderStatusTab>('ALL');
-  const [dateRange, setDateRange] = useState('10 вер 2026 р. - 11 жовт 2026 р.');
-  const [selectedExecutor, setSelectedExecutor] = useState('Всі виконавці');
+  const [dateRange, setDateRange] = useState(
+    language === 'pl' ? '10 wrz 2026 r. - 11 paź 2026 r.' : '10 вер 2026 р. - 11 жовт 2026 р.'
+  );
+  const [selectedExecutor, setSelectedExecutor] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [ordersList, setOrdersList] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +77,10 @@ export default function CashierScreen() {
       if (activeTab === 'CANCELLED' && ord.status !== 'CANCELLED') return false;
 
       // Фільтр за виконавцем / касиром
-      if (selectedExecutor !== 'Всі виконавці' && ord.cashierName !== selectedExecutor) {
+      if (
+        selectedExecutor !== 'ALL' &&
+        !ord.cashierName.toLowerCase().includes(selectedExecutor.toLowerCase())
+      ) {
         return false;
       }
 
@@ -83,154 +99,280 @@ export default function CashierScreen() {
   // Дії із замовленням (перевірка PUT методу)
   const handleOrderPress = (order: OrderItem) => {
     Alert.alert(
-      `Замовлення ${order.orderNumber}`,
-      `Статус: ${order.status === 'COMPLETED' ? 'Сплачено' : order.status === 'UNPAID' ? 'Очікує оплати' : 'Скасовано'}\nКлієнт: ${order.clientName}\nАдміністратор: ${order.cashierName}\nСума: ${order.totalAmount} ₴\nПослуги:\n• ${order.services.join('\n• ')}`,
+      `${t.cashier.order} ${order.orderNumber}`,
+      `${language === 'pl' ? 'Status' : 'Статус'}: ${order.status === 'COMPLETED' ? t.cashier.completed : order.status === 'UNPAID' ? t.cashier.unpaid : t.cashier.cancelled}\n${t.booking.client}: ${order.clientName}\n${t.cashier.admin}: ${order.cashierName}\n${t.cashier.total}: ${order.totalAmount} ₴\n${t.booking.services}:\n• ${order.services.join('\n• ')}`,
       [
         {
-          text: 'Сплачено (PUT)',
+          text: t.cashier.markPaid,
           onPress: async () => {
             await apiClient.updateOrderStatus(order.id, 'COMPLETED');
             fetchOrders();
           },
         },
         {
-          text: 'Скасувати чек (PUT)',
+          text: t.cashier.cancelReceipt,
           style: 'destructive',
           onPress: async () => {
             await apiClient.updateOrderStatus(order.id, 'CANCELLED');
             fetchOrders();
           },
         },
-        { text: 'Закрити', style: 'cancel' },
+        { text: t.common.cancel, style: 'cancel' },
       ]
     );
   };
 
   const handleDateFilterPress = () => {
-    Alert.alert('Період замовлень', 'Оберіть часовий проміжок для перегляду оплат', [
-      { text: 'Сьогодні (10 жовт 2026 р.)', onPress: () => setDateRange('10 жовт 2026 р.') },
-      { text: 'Останній місяць', onPress: () => setDateRange('10 вер 2026 р. - 11 жовт 2026 р.') },
-      { text: 'Скасувати', style: 'cancel' },
-    ]);
+    Alert.alert(
+      language === 'pl' ? 'Okres rozliczeniowy' : 'Період замовлень',
+      language === 'pl' ? 'Wybierz przedział czasowy' : 'Оберіть часовий проміжок для перегляду оплат',
+      [
+        {
+          text: language === 'pl' ? 'Dziś (10 paź 2026 r.)' : 'Сьогодні (10 жовт 2026 р.)',
+          onPress: () => setDateRange(language === 'pl' ? '10 paź 2026 r.' : '10 жовт 2026 р.'),
+        },
+        {
+          text: language === 'pl' ? 'Ostatni miesiąc' : 'Останній місяць',
+          onPress: () =>
+            setDateRange(
+              language === 'pl'
+                ? '10 wrz 2026 r. - 11 paź 2026 r.'
+                : '10 вер 2026 р. - 11 жовт 2026 р.'
+            ),
+        },
+        { text: t.common.cancel, style: 'cancel' },
+      ]
+    );
   };
 
-  const handleExecutorFilterPress = () => {
-    Alert.alert('Адміністратор', 'Фільтрувати чеки за адміністратором', [
-      { text: 'Всі адміністратори', onPress: () => setSelectedExecutor('Всі виконавці') },
-      { text: 'Артем Гіжовський (Адміністратор)', onPress: () => setSelectedExecutor('Артем Гіжовський (Адміністратор)') },
-      { text: 'Ігор Намачинський', onPress: () => setSelectedExecutor('Ігор Намачинський') },
-      { text: 'Артем Лабунський', onPress: () => setSelectedExecutor('Артем Лабунський') },
-      { text: 'Скасувати', style: 'cancel' },
-    ]);
+  const handleExecutorFilterPress = async () => {
+    const masters = await apiClient.getMasters();
+    const options: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = [
+      {
+        text: t.cashier.allExecutors,
+        onPress: () => setSelectedExecutor('ALL'),
+      },
+    ];
+
+    if (currentUser) {
+      options.push({
+        text: `${t.cashier.myOrders} (${currentRawName})`,
+        onPress: () => setSelectedExecutor(currentRawName),
+      });
+    }
+
+    masters.forEach((m) => {
+      if (m.name !== currentRawName) {
+        options.push({
+          text: m.name,
+          onPress: () => setSelectedExecutor(m.name),
+        });
+      }
+    });
+
+    options.push({ text: t.common.cancel, style: 'cancel' });
+
+    Alert.alert(
+      language === 'pl' ? 'Pracownicy' : 'Персонал',
+      language === 'pl' ? 'Filtruj paragony według pracownika' : 'Фільтрувати чеки за працівником',
+      options
+    );
   };
 
   const handleCreateOrder = () => {
     Alert.alert(
-      'Нове замовлення',
-      'Бажаєте створити чек на касі чи перейти до детального бронювання?',
+      language === 'pl' ? 'Nowe zamówienie' : 'Нове замовлення',
+      language === 'pl'
+        ? 'Utwórz szybki paragon lub przejdź do rezerwacji:'
+        : 'Бажаєте створити чек на касі чи перейти до детального бронювання?',
       [
-        { text: 'Нове бронювання', onPress: () => router.push('/(tabs)/new-booking') },
         {
-          text: 'Швидкий чек (700 ₴)',
+          text: language === 'pl' ? 'Nowa rezerwacja' : 'Нове бронювання',
+          onPress: () => router.push('/(tabs)/new-booking'),
+        },
+        {
+          text: `${language === 'pl' ? 'Szybki paragon' : 'Швидкий чек'} (700 ₴)`,
           onPress: async () => {
             await apiClient.createOrder({
               totalAmount: 700,
-              services: ['Комплексний манікюр + покриття'],
-              clientName: 'Гість салону',
-              cashierName: 'Артем Гіжовський (Адміністратор)',
+              services: [language === 'pl' ? 'Kompleksowy manicure + hybryda' : 'Комплексний манікюр + покриття'],
+              clientName: language === 'pl' ? 'Klient salonu' : 'Гість салону',
+              cashierName: currentUserName,
               status: 'COMPLETED',
             });
             fetchOrders();
           },
         },
-        { text: 'Скасувати', style: 'cancel' },
+        { text: t.common.cancel, style: 'cancel' },
       ]
     );
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* 1. Верхня плашка: кнопка оновлення даних */}
       <View style={styles.topBar}>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
-          style={styles.backButton}
+          style={[styles.backButton, { backgroundColor: colors.surfaceLight }]}
           activeOpacity={0.7}
           onPress={fetchOrders}
         >
-          <MaterialCommunityIcons name="refresh" size={20} color="#FFFFFF" />
+          <MaterialCommunityIcons name="refresh" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       {/* 2. Заголовок "Замовлення" */}
-      <Text style={styles.screenTitle}>Замовлення</Text>
+      <Text style={[styles.screenTitle, { color: colors.text }]}>{t.cashier.title}</Text>
 
       {/* 3. Сегментований перемикач статусів (Всі, Не сплачено, Завершено, Скасовано) */}
-      <View style={styles.segmentContainer}>
+      <View style={[styles.segmentContainer, { backgroundColor: colors.surfaceLight }]}>
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'ALL' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'ALL' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('ALL')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'ALL' && styles.segmentTextActive]}>
-            Всі
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'ALL' ? colors.text : colors.textSecondary },
+              activeTab === 'ALL' && styles.segmentTextActive,
+            ]}
+          >
+            {t.cashier.all}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'UNPAID' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'UNPAID' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('UNPAID')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'UNPAID' && styles.segmentTextActive]}>
-            Не сплачено
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'UNPAID' ? colors.text : colors.textSecondary },
+              activeTab === 'UNPAID' && styles.segmentTextActive,
+            ]}
+          >
+            {t.cashier.unpaid}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'COMPLETED' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'COMPLETED' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('COMPLETED')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'COMPLETED' && styles.segmentTextActive]}>
-            Завершено
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'COMPLETED' ? colors.text : colors.textSecondary },
+              activeTab === 'COMPLETED' && styles.segmentTextActive,
+            ]}
+          >
+            {t.cashier.completed}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'CANCELLED' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'CANCELLED' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('CANCELLED')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'CANCELLED' && styles.segmentTextActive]}>
-            Скасовано
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'CANCELLED' ? colors.text : colors.textSecondary },
+              activeTab === 'CANCELLED' && styles.segmentTextActive,
+            ]}
+          >
+            {t.cashier.cancelled}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* 4. Фільтр дат */}
+      {/* 4. Фільтр дат та виконавців */}
       <View style={styles.filterPillWrapper}>
-        <TouchableOpacity
-          style={styles.filterPill}
-          activeOpacity={0.75}
-          onPress={handleDateFilterPress}
-        >
-          <Text style={styles.filterPillText}>{dateRange}</Text>
-          <MaterialCommunityIcons name="menu-down" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <TouchableOpacity
+            style={[
+              styles.filterPill,
+              { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            ]}
+            activeOpacity={0.75}
+            onPress={handleDateFilterPress}
+          >
+            <MaterialCommunityIcons name="calendar-range" size={16} color={colors.textSecondary} />
+            <Text style={[styles.filterPillText, { color: colors.text }]}>{dateRange}</Text>
+            <MaterialCommunityIcons name="menu-down" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterPill,
+              {
+                backgroundColor: selectedExecutor !== 'ALL' ? '#10B98120' : colors.surface,
+                borderColor: selectedExecutor !== 'ALL' ? '#10B981' : colors.cardBorder,
+              },
+            ]}
+            activeOpacity={0.75}
+            onPress={handleExecutorFilterPress}
+          >
+            <MaterialCommunityIcons
+              name="account"
+              size={16}
+              color={selectedExecutor !== 'ALL' ? '#10B981' : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.filterPillText,
+                { color: selectedExecutor !== 'ALL' ? '#10B981' : colors.text },
+              ]}
+            >
+              {selectedExecutor === 'ALL'
+                ? t.cashier.allExecutors
+                : selectedExecutor === currentRawName
+                ? `${t.cashier.myOrders} (${currentRawName})`
+                : selectedExecutor}
+            </Text>
+            <MaterialCommunityIcons
+              name="menu-down"
+              size={18}
+              color={selectedExecutor !== 'ALL' ? '#10B981' : colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       {/* 6. Пошук */}
       <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+          ]}
+        >
           <TextInput
-            placeholder="Пошук чека за клієнтом або послугою"
-            placeholderTextColor="#8E8E93"
+            placeholder={t.cashier.searchPlaceholder}
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
           />
-          <MaterialCommunityIcons name="magnify" size={22} color="#8E8E93" />
+          <MaterialCommunityIcons name="magnify" size={22} color={colors.textSecondary} />
         </View>
       </View>
 
@@ -250,18 +392,20 @@ export default function CashierScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4CAF50" />
-            <Text style={styles.loadingText}>Завантаження замовлень...</Text>
+            <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+              {t.common.loading}
+            </Text>
           </View>
         ) : filteredOrders.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <MaterialCommunityIcons name="cash-register" size={44} color="#8E8E93" />
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceLight }]}>
+              <MaterialCommunityIcons name="cash-register" size={44} color={colors.textSecondary} />
             </View>
-            <Text style={styles.emptyTitle}>Замовлень не знайдено</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.cashier.emptyOrders}</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
               {searchQuery.trim()
-                ? 'Нічого не відповідає вашому запиту'
-                : 'Тут з\'являтимуться чеки після створення записів у календарі або швидких оплат'}
+                ? (language === 'pl' ? 'Brak wyników dla podanego zapytania' : 'Нічого не відповідає вашому запиту')
+                : t.cashier.emptySubtitle}
             </Text>
           </View>
         ) : (
@@ -274,6 +418,18 @@ export default function CashierScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* 8. Плаваюча кнопка "+ Створити чек" (FAB) */}
+      <TouchableOpacity
+        style={styles.fabButton}
+        activeOpacity={0.85}
+        onPress={handleCreateOrder}
+      >
+        <MaterialCommunityIcons name="receipt-text-plus" size={20} color="#FFFFFF" />
+        <Text style={styles.fabText}>
+          {language === 'pl' ? 'Nowy paragon' : 'Новий чек'}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }

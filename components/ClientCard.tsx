@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ClientItem } from '../services/mockData';
+import { useAppSettings } from '../context/AppSettingsContext';
 
 interface ClientCardProps {
   client: ClientItem;
@@ -21,6 +22,7 @@ export const ClientCard: React.FC<ClientCardProps> = ({
   showAddButton,
   onAddPress,
 }) => {
+  const { colors, t } = useAppSettings();
   const firstLetter = (client.name.charAt(0) || 'К').toUpperCase();
 
   // Форматування валюти з пробілами (напр. 23 260,00 ₴)
@@ -31,7 +33,11 @@ export const ClientCard: React.FC<ClientCardProps> = ({
   };
 
   return (
-    <TouchableOpacity activeOpacity={0.88} onPress={onPress} style={styles.card}>
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      style={[styles.card, { backgroundColor: colors.surface }]}
+    >
       {/* 1. Верхній рядок: Аватар + Ім'я з CN-кодом + Стрілочка або кнопка Додати */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
@@ -39,32 +45,34 @@ export const ClientCard: React.FC<ClientCardProps> = ({
             <Text style={styles.avatarLetter}>{firstLetter}</Text>
           </View>
           <View style={styles.titleBox}>
-            <Text style={styles.nameText}>{client.name}</Text>
-            <Text style={styles.cnCodeText}>{client.cnCode || 'CN-1013'}</Text>
+            <Text style={[styles.nameText, { color: colors.text }]}>{client.name}</Text>
+            <Text style={[styles.cnCodeText, { color: colors.textSecondary }]}>
+              {client.cnCode || 'CN-1013'}
+            </Text>
           </View>
         </View>
 
-        <MaterialCommunityIcons name="chevron-right" size={24} color="#8E8E93" />
+        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </View>
 
       {/* Розділювач */}
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
       {/* 2. Детальні рядки (Теги, Телефон, Візити, Сер. чек, Оплачено) */}
       <View style={styles.detailsList}>
         {/* Теги */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Теги</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.tags}</Text>
           <TouchableOpacity activeOpacity={0.7} style={styles.tagLink}>
-            <Text style={styles.tagLinkText}>
-              {client.tags && client.tags.length > 0 ? client.tags.join(', ') : 'Додати теги'}
+            <Text style={[styles.tagLinkText, { color: colors.textSecondary }]}>
+              {client.tags && client.tags.length > 0 ? client.tags.join(', ') : t.clients.addTags}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Телефон */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Телефон</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.phone}</Text>
           <TouchableOpacity activeOpacity={0.7} style={styles.phoneBox}>
             <MaterialCommunityIcons name="check-circle" size={15} color="#4CAF50" />
             <Text style={styles.phoneText}>{client.phone}</Text>
@@ -74,20 +82,20 @@ export const ClientCard: React.FC<ClientCardProps> = ({
 
         {/* Візитів */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Візитів</Text>
-          <Text style={styles.valueCol}>{client.visitCount}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.visits}</Text>
+          <Text style={[styles.valueCol, { color: colors.text }]}>{client.visitCount}</Text>
         </View>
 
         {/* Середній чек */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Середній чек</Text>
-          <Text style={styles.valueCol}>{formatMoney(client.averageCheck)}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.avgCheck}</Text>
+          <Text style={[styles.valueCol, { color: colors.text }]}>{formatMoney(client.averageCheck)}</Text>
         </View>
 
         {/* Оплачено */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Оплачено</Text>
-          <Text style={styles.valueHighlight}>{formatMoney(client.totalSpent)}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.paid}</Text>
+          <Text style={[styles.valueHighlight, { color: colors.text }]}>{formatMoney(client.totalSpent)}</Text>
         </View>
       </View>
     </TouchableOpacity>

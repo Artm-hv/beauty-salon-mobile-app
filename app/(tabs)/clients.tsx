@@ -20,6 +20,7 @@ import { useRouter } from 'expo-router';
 import { ClientCard } from '../../components/ClientCard';
 import { ClientItem } from '../../services/mockData';
 import { apiClient } from '../../services/api';
+import { useAppSettings } from '../../context/AppSettingsContext';
 
 type SegmentTab = 'ALL' | 'NEW' | 'INACTIVE' | 'NO_RECORD';
 
@@ -34,6 +35,7 @@ type SegmentTab = 'ALL' | 'NEW' | 'INACTIVE' | 'NO_RECORD';
  */
 export default function ClientsCRMScreen() {
   const router = useRouter();
+  const { colors, t, language } = useAppSettings();
   const [activeTab, setActiveTab] = useState<SegmentTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [clientsList, setClientsList] = useState<ClientItem[]>([]);
@@ -180,83 +182,128 @@ export default function ClientsCRMScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* 1. Верхня панель дій з меню */}
       <View style={styles.topBar}>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
-          style={styles.menuButton}
+          style={[styles.menuButton, { backgroundColor: colors.surfaceLight }]}
           activeOpacity={0.7}
           onPress={handleMenuPress}
         >
-          <MaterialCommunityIcons name="dots-horizontal" size={22} color="#FFFFFF" />
+          <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text} />
         </TouchableOpacity>
       </View>
 
       {/* 2. Заголовок "Клієнти" */}
-      <Text style={styles.screenTitle}>Клієнти</Text>
+      <Text style={[styles.screenTitle, { color: colors.text }]}>{t.clients.title}</Text>
 
       {/* 3. Сегментований перемикач */}
-      <View style={styles.segmentContainer}>
+      <View style={[styles.segmentContainer, { backgroundColor: colors.surfaceLight }]}>
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'ALL' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'ALL' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('ALL')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'ALL' && styles.segmentTextActive]}>
-            Всі
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'ALL' ? colors.text : colors.textSecondary },
+              activeTab === 'ALL' && styles.segmentTextActive,
+            ]}
+          >
+            {language === 'pl' ? 'Wszyscy' : 'Всі'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'NEW' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'NEW' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('NEW')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'NEW' && styles.segmentTextActive]}>
-            Нові
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'NEW' ? colors.text : colors.textSecondary },
+              activeTab === 'NEW' && styles.segmentTextActive,
+            ]}
+          >
+            {language === 'pl' ? 'Nowi' : 'Нові'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'INACTIVE' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'INACTIVE' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('INACTIVE')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'INACTIVE' && styles.segmentTextActive]}>
-            Неактивні
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'INACTIVE' ? colors.text : colors.textSecondary },
+              activeTab === 'INACTIVE' && styles.segmentTextActive,
+            ]}
+          >
+            {language === 'pl' ? 'Nieaktywni' : 'Неактивні'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.segmentTab, activeTab === 'NO_RECORD' && styles.segmentTabActive]}
+          style={[
+            styles.segmentTab,
+            activeTab === 'NO_RECORD' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+          ]}
           onPress={() => setActiveTab('NO_RECORD')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.segmentText, activeTab === 'NO_RECORD' && styles.segmentTextActive]}>
-            Без запису
+          <Text
+            style={[
+              styles.segmentText,
+              { color: activeTab === 'NO_RECORD' ? colors.text : colors.textSecondary },
+              activeTab === 'NO_RECORD' && styles.segmentTextActive,
+            ]}
+          >
+            {language === 'pl' ? 'Bez wizyt' : 'Без запису'}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* 4. Пошук клієнтів (на всю ширину) */}
       <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+          ]}
+        >
           <TextInput
-            placeholder="Пошук клієнта за ім'ям або телефоном"
-            placeholderTextColor="#8E8E93"
+            placeholder={t.clients.searchPlaceholder}
+            placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
           />
-          <MaterialCommunityIcons name="magnify" size={22} color="#8E8E93" />
+          <MaterialCommunityIcons name="magnify" size={22} color={colors.textSecondary} />
         </View>
       </View>
 
       {/* 5. Плашка лічильника клієнтів */}
-      <View style={styles.counterCard}>
-        <Text style={styles.counterMainText}>
-          {filteredClients.length} клієнтів показано <Text style={styles.counterSubText}>з {clientsList.length}</Text>
+      <View style={[styles.counterCard, { backgroundColor: colors.surface }]}>
+        <Text style={[styles.counterMainText, { color: colors.text }]}>
+          {filteredClients.length}{' '}
+          {language === 'pl' ? 'klientów z' : 'клієнтів показано з'}{' '}
+          <Text style={[styles.counterSubText, { color: colors.textSecondary }]}>
+            {clientsList.length}
+          </Text>
         </Text>
       </View>
 
@@ -280,14 +327,14 @@ export default function ClientsCRMScreen() {
           </View>
         ) : filteredClients.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <MaterialCommunityIcons name="account-group-outline" size={48} color="#8E8E93" />
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.surfaceLight }]}>
+              <MaterialCommunityIcons name="account-group-outline" size={48} color={colors.textSecondary} />
             </View>
-            <Text style={styles.emptyTitle}>База клієнтів порожня</Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.clients.emptyTitle}</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
               {searchQuery.trim()
-                ? 'За вашим запитом нічого не знайдено'
-                : 'Натисніть кнопку "+ Додати клієнта", щоб зареєструвати першого клієнта'}
+                ? (language === 'pl' ? 'Brak wyników dla podanego zapytania' : 'За вашим запитом нічого не знайдено')
+                : t.clients.emptySubtitle}
             </Text>
             {!searchQuery.trim() && (
               <TouchableOpacity
@@ -295,8 +342,10 @@ export default function ClientsCRMScreen() {
                 activeOpacity={0.85}
                 onPress={() => setIsAddModalOpen(true)}
               >
-                <MaterialCommunityIcons name="plus" size={18} color="#000000" />
-                <Text style={styles.emptyAddButtonText}>Додати першого клієнта</Text>
+                <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                <Text style={styles.emptyAddButtonText}>
+                  {language === 'pl' ? 'Dodaj pierwszego klienta' : 'Додати першого клієнта'}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -318,7 +367,9 @@ export default function ClientsCRMScreen() {
         onPress={() => setIsAddModalOpen(true)}
       >
         <MaterialCommunityIcons name="account-plus" size={20} color="#FFFFFF" />
-        <Text style={styles.fabText}>Додати клієнта</Text>
+        <Text style={styles.fabText}>
+          {language === 'pl' ? 'Dodaj klienta' : 'Додати клієнта'}
+        </Text>
       </TouchableOpacity>
 
       {/* Модальне вікно додавання клієнта з підтримкою клавіатури */}
@@ -332,11 +383,13 @@ export default function ClientsCRMScreen() {
             <View style={styles.modalBackdropDismiss} />
           </TouchableWithoutFeedback>
 
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Новий клієнт</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {language === 'pl' ? 'Nowy klient' : 'Новий клієнт'}
+              </Text>
               <TouchableOpacity onPress={() => setIsAddModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -346,32 +399,53 @@ export default function ClientsCRMScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalScrollBody}
             >
-              <Text style={styles.inputLabel}>Ім'я та прізвище *</Text>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>
+                {language === 'pl' ? 'Imię i nazwisko *' : "Ім'я та прізвище *"}
+              </Text>
               <TextInput
-                placeholder="наприклад, Анна Коваленко"
-                placeholderTextColor="#8E8E93"
+                placeholder={language === 'pl' ? 'np. Anna Kowalska' : 'наприклад, Анна Коваленко'}
+                placeholderTextColor={colors.textSecondary}
                 value={newName}
                 onChangeText={setNewName}
-                style={styles.modalInput}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: colors.surfaceLight,
+                    borderColor: colors.cardBorder,
+                    color: colors.text,
+                  },
+                ]}
               />
 
-              <Text style={styles.inputLabel}>Номер телефону</Text>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>
+                {language === 'pl' ? 'Numer telefonu' : 'Номер телефону'}
+              </Text>
               <TextInput
-                placeholder="+380 67 123 4567"
-                placeholderTextColor="#8E8E93"
+                placeholder="+48 500 000 000"
+                placeholderTextColor={colors.textSecondary}
                 value={newPhone}
                 onChangeText={setNewPhone}
                 keyboardType="phone-pad"
-                style={styles.modalInput}
+                style={[
+                  styles.modalInput,
+                  {
+                    backgroundColor: colors.surfaceLight,
+                    borderColor: colors.cardBorder,
+                    color: colors.text,
+                  },
+                ]}
               />
 
-              <Text style={styles.inputLabel}>Категорія клієнта</Text>
+              <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>
+                {language === 'pl' ? 'Kategoria klienta' : 'Категорія клієнта'}
+              </Text>
               <View style={styles.categoryPickerRow}>
                 {(['NEW', 'VIP', 'INACTIVE'] as const).map((cat) => (
                   <TouchableOpacity
                     key={cat}
                     style={[
                       styles.categoryChip,
+                      { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
                       newCategory === cat && styles.categoryChipActive,
                     ]}
                     onPress={() => setNewCategory(cat)}
@@ -379,10 +453,15 @@ export default function ClientsCRMScreen() {
                     <Text
                       style={[
                         styles.categoryChipText,
+                        { color: colors.textSecondary },
                         newCategory === cat && styles.categoryChipTextActive,
                       ]}
                     >
-                      {cat === 'NEW' ? 'Новий' : cat === 'VIP' ? 'VIP' : 'Неактивний'}
+                      {cat === 'NEW'
+                        ? (language === 'pl' ? 'Nowy' : 'Новий')
+                        : cat === 'VIP'
+                        ? 'VIP'
+                        : (language === 'pl' ? 'Nieaktywny' : 'Неактивний')}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -395,9 +474,9 @@ export default function ClientsCRMScreen() {
                 activeOpacity={0.85}
               >
                 {submitting ? (
-                  <ActivityIndicator color="#000000" />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.modalSubmitBtnText}>Зберегти в базу</Text>
+                  <Text style={styles.modalSubmitBtnText}>{t.clients.saveClient}</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>

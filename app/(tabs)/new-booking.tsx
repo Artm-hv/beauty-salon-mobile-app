@@ -15,9 +15,19 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MOCK_MASTERS, Master, ClientItem, AppointmentItem } from '../../services/mockData';
 import { apiClient } from '../../services/api';
+import { useAppSettings } from '../../context/AppSettingsContext';
+import { authService } from '../../services/authService';
 
 // Каталог послуг салону "Svoya Nail Studio"
-const AVAILABLE_SERVICES = [
+const AVAILABLE_SERVICES_PL = [
+  { id: 's-1', name: 'Kompleksowy manicure + hybryda', price: 700, duration: '1 godz 30 min' },
+  { id: 's-2', name: 'Przedłużanie paznokci (żel)', price: 1100, duration: '2 godz 00 min' },
+  { id: 's-3', name: 'Pedicure frezarkowy', price: 850, duration: '1 godz 30 min' },
+  { id: 's-4', name: 'Zdjęcie + manicure klasyczny', price: 450, duration: '1 godz 00 min' },
+  { id: 's-5', name: 'Zdobienie paznokci (french / wzorki)', price: 250, duration: '30 min' },
+];
+
+const AVAILABLE_SERVICES_UA = [
   { id: 's-1', name: 'Комплексний манікюр + покриття', price: 700, duration: '1 год 30 хв' },
   { id: 's-2', name: 'Нарощування нігтів (гелеве)', price: 1100, duration: '2 год 00 хв' },
   { id: 's-3', name: 'Апаратний педикюр', price: 850, duration: '1 год 30 хв' },
@@ -25,7 +35,8 @@ const AVAILABLE_SERVICES = [
   { id: 's-5', name: 'Дизайн нігтів (складний розпис)', price: 250, duration: '30 хв' },
 ];
 
-const ORDER_SOURCES = ['По телефону', 'Instagram', 'Онлайн-запис', 'Viber', 'На місці'];
+const ORDER_SOURCES_PL = ['Przez telefon', 'Instagram', 'Rezerwacja online', 'Viber', 'Na miejscu'];
+const ORDER_SOURCES_UA = ['По телефону', 'Instagram', 'Онлайн-запис', 'Viber', 'На місці'];
 
 // Динамічне визначення поточної дати за системним календарем (сьогоднішній день)
 const getTodayIsoDate = (): string => {
@@ -36,10 +47,18 @@ const getTodayIsoDate = (): string => {
   return `${y}-${m}-${d}`;
 };
 
-const formatDisplayDate = (dateStr: string): string => {
+const formatDisplayDate = (dateStr: string, lang: 'pl' | 'ua'): string => {
   try {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dateObj = new Date(y, m - 1, d);
+    if (lang === 'pl') {
+      const plDays = ['Nd', 'Pn', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob'];
+      const plMonths = [
+        'stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
+        'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'
+      ];
+      return `${plDays[dateObj.getDay()]}, ${dateObj.getDate()} ${plMonths[dateObj.getMonth()]} ${y} r.`;
+    }
     const ukrDays = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
     const ukrMonthsFull = [
       'січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
@@ -70,11 +89,17 @@ const AVAILABLE_TIME_SLOTS = [
   '20:00',
 ];
 
+const PL_MONTHS_NAMES = [
+  'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
+  'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
+];
+
 const UKR_MONTHS_NAMES = [
   'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
   'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
 ];
 
+const PL_WEEKDAY_NAMES = ['Pn', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nd'];
 const WEEKDAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 
 /**
@@ -84,7 +109,15 @@ const WEEKDAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
  */
 export default function NewBookingScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ clientId?: string }>();
+  const { colors, t, language } = useAppSettings();
+  const currentUser = authService.getCurrentUser();
+  const currentUserName = currentUser
+    ? (currentUser.name || `${currentUser.firstName} ${currentUser.lastName}`.trim())
+    : '';
+  const params = useLocalSearchParams<{ clientId?: string; masterId?: string }>();
+
+  const availableServices = language === 'pl' ? AVAILABLE_SERVICES_PL : AVAILABLE_SERVICES_UA;
+  const orderSourcesList = language === 'pl' ? ORDER_SOURCES_PL : ORDER_SOURCES_UA;
 
   // Стан вибору майстра (за замовчуванням: null / "Не обрано")
   const [mastersList, setMastersList] = useState<Master[]>(MOCK_MASTERS);
@@ -101,11 +134,11 @@ export default function NewBookingScreen() {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // Стан форми
-  const [selectedServices, setSelectedServices] = useState<typeof AVAILABLE_SERVICES>([]);
+  const [selectedServices, setSelectedServices] = useState<typeof AVAILABLE_SERVICES_UA>([]);
   const [clientsList, setClientsList] = useState<ClientItem[]>([]);
   const [selectedClient, setSelectedClient] = useState<ClientItem | null>(null);
   const [comment, setComment] = useState('');
-  const [orderSource, setOrderSource] = useState('По телефону');
+  const [orderSource, setOrderSource] = useState(orderSourcesList[0]);
 
   // Модальні вікна
   const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
@@ -130,7 +163,8 @@ export default function NewBookingScreen() {
         apiClient.getClients(),
         apiClient.getAppointments(),
       ]);
-      if (masters && masters.length > 0) setMastersList(masters);
+      const currentMasters = masters && masters.length > 0 ? masters : MOCK_MASTERS;
+      setMastersList(currentMasters);
       setClientsList(clients);
       if (appointments) setAppointmentsList(appointments);
 
@@ -141,8 +175,21 @@ export default function NewBookingScreen() {
           setSelectedClient(found);
         }
       }
+
+      // Якщо передано masterId, або поточний користувач є MASTER - авто-вибираємо його
+      if (params.masterId) {
+        const found = currentMasters.find((m) => m.id === params.masterId);
+        if (found) setSelectedMaster(found);
+      } else if (currentUser?.role === 'MASTER' && !selectedMaster && currentUserName) {
+        const found = currentMasters.find(
+          (m) =>
+            m.name.toLowerCase().includes(currentUserName.toLowerCase()) ||
+            currentUserName.toLowerCase().includes(m.name.toLowerCase())
+        );
+        if (found) setSelectedMaster(found);
+      }
     } catch {}
-  }, [params.clientId]);
+  }, [params.clientId, params.masterId, currentUserName, currentUser?.role, selectedMaster]);
 
   // Перевірка зайнятості часового слоту у розкладі обраного майстра
   const getSlotConflict = (
@@ -234,7 +281,7 @@ export default function NewBookingScreen() {
     return `${integerPart},${parts[1]} ₴`;
   };
 
-  const handleToggleService = (service: (typeof AVAILABLE_SERVICES)[0]) => {
+  const handleToggleService = (service: (typeof availableServices)[0]) => {
     if (selectedServices.some((s) => s.id === service.id)) {
       setSelectedServices(selectedServices.filter((s) => s.id !== service.id));
     } else {
@@ -244,16 +291,19 @@ export default function NewBookingScreen() {
 
   const handleCreateNewClient = async () => {
     if (!newClientName.trim()) {
-      Alert.alert('Помилка', "Введіть ім'я клієнта");
+      Alert.alert(
+        language === 'pl' ? 'Błąd' : 'Помилка',
+        language === 'pl' ? 'Wpisz imię klienta' : "Введіть ім'я клієнта"
+      );
       return;
     }
 
     try {
       const created = await apiClient.createClient({
         name: newClientName.trim(),
-        phone: newClientPhone.trim() || '+380 67 000 0000',
+        phone: newClientPhone.trim() || (language === 'pl' ? '+48 500 000 000' : '+380 67 000 0000'),
         category: 'NEW',
-        tags: ['Новий клієнт'],
+        tags: [language === 'pl' ? 'Nowy klient' : 'Новий клієнт'],
       });
 
       setClientsList((prev) => [created, ...prev]);
@@ -262,32 +312,46 @@ export default function NewBookingScreen() {
       setNewClientName('');
       setNewClientPhone('');
     } catch {
-      Alert.alert('Помилка', 'Не вдалося зберегти клієнта');
+      Alert.alert(
+        language === 'pl' ? 'Błąd' : 'Помилка',
+        language === 'pl' ? 'Nie udało się zapisać klienta' : 'Не вдалося зберегти клієнта'
+      );
     }
   };
 
   // Збереження бронювання через REST API (POST /api/bookings)
   const handleSave = async () => {
     if (!selectedMaster) {
-      Alert.alert('Оберіть майстра', 'Будь ласка, оберіть майстра перед збереженням запису');
+      Alert.alert(
+        t.booking.selectMaster,
+        language === 'pl'
+          ? 'Proszę wybrać pracownika przed zapisaniem rezerwacji'
+          : 'Будь ласка, оберіть майстра перед збереженням запису'
+      );
       return;
     }
 
     const conflict = getSlotConflict(bookingTime, selectedMaster.id, bookingDate);
     if (conflict) {
       Alert.alert(
-        'Час вже зайнятий!',
-        `У майстра ${selectedMaster.name} о ${bookingTime} вже призначено запис:\n"${conflict.serviceName}" (${conflict.clientName}).\n\nБудь ласка, оберіть іншу вільну годину.`
+        t.booking.slotConflict,
+        language === 'pl'
+          ? `U pracownika ${selectedMaster.name} o ${bookingTime} jest już zaplanowana wizyta:\n"${conflict.serviceName}" (${conflict.clientName}).\n\nProszę wybrać inną wolną godzinę.`
+          : `У майстра ${selectedMaster.name} о ${bookingTime} вже призначено запис:\n"${conflict.serviceName}" (${conflict.clientName}).\n\nБудь ласка, оберіть іншу вільну годину.`
       );
       return;
     }
 
     setIsSaving(true);
     try {
+      const defaultService =
+        language === 'pl'
+          ? 'Kompleksowy manicure + hybryda'
+          : 'Комплексний манікюр + покриття';
       const serviceTitle =
         selectedServices.length > 0
           ? selectedServices.map((s) => s.name).join(', ')
-          : 'Комплексний манікюр + покриття';
+          : defaultService;
       const price = totalPrice > 0 ? totalPrice : 700;
 
       // Обчислення кінцевого часу (додаємо 1.5 години)
@@ -298,7 +362,7 @@ export default function NewBookingScreen() {
 
       await apiClient.createBooking({
         masterId: selectedMaster.id,
-        clientName: selectedClient ? selectedClient.name : 'Анонімний клієнт',
+        clientName: selectedClient ? selectedClient.name : t.booking.anonymousClient,
         clientPhone: selectedClient ? selectedClient.phone : '+380 67 000 0000',
         serviceName: serviceTitle,
         date: bookingDate,
@@ -307,6 +371,7 @@ export default function NewBookingScreen() {
         price: price,
         notes: comment,
         colorType: 'green',
+        source: orderSource,
       });
 
       setSnackbarVisible(true);
@@ -314,26 +379,29 @@ export default function NewBookingScreen() {
         router.push('/(tabs)/calendar');
       }, 1000);
     } catch {
-      Alert.alert('Помилка', 'Не вдалося зберегти запис');
+      Alert.alert(
+        language === 'pl' ? 'Błąd' : 'Помилка',
+        language === 'pl' ? 'Nie udało się zapisać rezerwacji' : 'Не вдалося зберегти запис'
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* 2. Заголовок "Нове бронювання" */}
-        <Text style={styles.pageTitle}>Нове бронювання</Text>
+        <Text style={[styles.pageTitle, { color: colors.text }]}>{t.booking.newBooking}</Text>
 
         {/* 3. Картка дати та часу */}
-        <View style={styles.dateTimeCardWrapper}>
-          <View style={styles.floatingBadge}>
-            <MaterialCommunityIcons name="calendar-clock" size={20} color="#FFFFFF" />
+        <View style={[styles.dateTimeCardWrapper, { backgroundColor: colors.surface }]}>
+          <View style={[styles.floatingBadge, { backgroundColor: colors.surfaceLight }]}>
+            <MaterialCommunityIcons name="calendar-clock" size={20} color={colors.text} />
           </View>
 
           <TouchableOpacity
@@ -342,46 +410,54 @@ export default function NewBookingScreen() {
             onPress={handleOpenTimeModal}
           >
             <View style={styles.dateTimeRow}>
-              <Text style={styles.dateTimeText}>
-                {formatDisplayDate(bookingDate)} • {bookingTime}
+              <Text style={[styles.dateTimeText, { color: colors.text }]}>
+                {formatDisplayDate(bookingDate, language)} • {bookingTime}
               </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color="#FFFFFF" />
+              <MaterialCommunityIcons name="chevron-down" size={20} color={colors.textSecondary} />
             </View>
           </TouchableOpacity>
         </View>
 
         {/* 3.1. Картка "Майстер" - Відкидний список */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Майстер</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t.booking.master}</Text>
           <TouchableOpacity
-            style={styles.dropdownSelectorBox}
+            style={[
+              styles.dropdownSelectorBox,
+              { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
+            ]}
             activeOpacity={0.75}
             onPress={() => setIsMasterModalOpen(true)}
           >
             <View style={styles.dropdownSelectorLeft}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.dropdownSelectorMainText}>
-                  {selectedMaster ? selectedMaster.name : 'Не обрано'}
+                <Text style={[styles.dropdownSelectorMainText, { color: colors.text }]}>
+                  {selectedMaster ? selectedMaster.name : (language === 'pl' ? 'Nie wybrano' : 'Не обрано')}
                 </Text>
-                <Text style={styles.dropdownSelectorSubText}>
-                  {selectedMaster ? selectedMaster.specialty : 'Натисніть, щоб обрати майстра'}
+                <Text style={[styles.dropdownSelectorSubText, { color: colors.textSecondary }]}>
+                  {selectedMaster
+                    ? selectedMaster.specialty
+                    : (language === 'pl' ? 'Kliknij, aby wybrać pracownika' : 'Натисніть, щоб обрати майстра')}
                 </Text>
               </View>
             </View>
-            <MaterialCommunityIcons name="menu-down" size={24} color="#8E8E93" />
+            <MaterialCommunityIcons name="menu-down" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
         {/* 4. Картка "Послуги" */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Послуги</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{t.booking.services}</Text>
 
           {/* Вибрані послуги, якщо є */}
           {selectedServices.map((service) => (
-            <View key={service.id} style={styles.selectedServiceItem}>
+            <View
+              key={service.id}
+              style={[styles.selectedServiceItem, { backgroundColor: colors.surfaceLight }]}
+            >
               <View style={{ flex: 1 }}>
-                <Text style={styles.selectedServiceName}>{service.name}</Text>
-                <Text style={styles.selectedServiceMeta}>
+                <Text style={[styles.selectedServiceName, { color: colors.text }]}>{service.name}</Text>
+                <Text style={[styles.selectedServiceMeta, { color: colors.textSecondary }]}>
                   {service.duration} • {service.price} ₴
                 </Text>
               </View>
@@ -389,30 +465,33 @@ export default function NewBookingScreen() {
                 onPress={() => handleToggleService(service)}
                 style={styles.removeServiceBtn}
               >
-                <MaterialCommunityIcons name="close" size={18} color="#8E8E93" />
+                <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           ))}
 
           {/* Пунктирна кнопка "+ Додати послугу" */}
           <TouchableOpacity
-            style={styles.dashedAddBox}
+            style={[styles.dashedAddBox, { borderColor: colors.cardBorder }]}
             activeOpacity={0.7}
             onPress={() => setIsServiceModalOpen(true)}
           >
-            <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-            <Text style={styles.dashedAddText}>Додати послугу</Text>
+            <MaterialCommunityIcons name="plus" size={18} color={colors.text} />
+            <Text style={[styles.dashedAddText, { color: colors.text }]}>{t.booking.addService}</Text>
           </TouchableOpacity>
         </View>
 
         {/* 5. Картка "Клієнт" */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
           <View style={styles.clientHeaderRow}>
-            <Text style={styles.cardTitle}>Клієнт</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>{t.booking.client}</Text>
           </View>
 
           <TouchableOpacity
-            style={styles.clientSelectorBox}
+            style={[
+              styles.clientSelectorBox,
+              { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
+            ]}
             activeOpacity={0.75}
             onPress={() => {
               loadData();
@@ -420,67 +499,85 @@ export default function NewBookingScreen() {
             }}
           >
             <View style={styles.clientSelectorLeft}>
-              <View style={styles.incognitoCircle}>
+              <View style={[styles.incognitoCircle, { backgroundColor: colors.surface }]}>
                 <MaterialCommunityIcons
                   name={selectedClient ? 'account' : 'incognito'}
                   size={18}
-                  color="#8E8E93"
+                  color={colors.textSecondary}
                 />
               </View>
-              <Text style={styles.clientSelectorText}>
+              <Text style={[styles.clientSelectorText, { color: colors.textSecondary }]}>
                 {selectedClient
-                  ? `${selectedClient.name} (${selectedClient.cnCode || 'Клієнт'})`
-                  : 'Не обрано (Анонімний)'}
+                  ? `${selectedClient.name} (${selectedClient.cnCode || (language === 'pl' ? 'Klient' : 'Клієнт')})`
+                  : (language === 'pl' ? 'Nie wybrano (Anonimowy)' : 'Не обрано (Анонімний)')}
               </Text>
             </View>
-            <MaterialCommunityIcons name="menu-down" size={18} color="#8E8E93" />
+            <MaterialCommunityIcons name="menu-down" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
         {/* 7. Картка "Підсумок" */}
-        <View style={styles.card}>
-          <Text style={styles.summaryTitle}>Підсумок</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.summaryTitle, { color: colors.text }]}>
+            {language === 'pl' ? 'Podsumowanie' : 'Підсумок'}
+          </Text>
 
           <View style={styles.summaryHeaderRow}>
-            <Text style={styles.summaryLabel}>Проміжний підсумок</Text>
-            <Text style={styles.summaryLabel}>Усього за бронювання</Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              {language === 'pl' ? 'Wartość usług' : 'Проміжний підсумок'}
+            </Text>
+            <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
+              {language === 'pl' ? 'Razem za rezerwację' : 'Усього за бронювання'}
+            </Text>
           </View>
 
-          <Text style={styles.summaryAmount}>{formatMoney(totalPrice)}</Text>
+          <Text style={[styles.summaryAmount, { color: colors.text }]}>{formatMoney(totalPrice)}</Text>
         </View>
 
         {/* 8. Секція "Коментар" та "Джерело замовлення" */}
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.surface }]}>
           {/* Коментар */}
           <TextInput
-            placeholder="Коментар"
-            placeholderTextColor="#636366"
+            placeholder={t.booking.comment}
+            placeholderTextColor={colors.textSecondary}
             value={comment}
             onChangeText={setComment}
-            style={styles.commentInput}
+            style={[
+              styles.commentInput,
+              {
+                backgroundColor: colors.surfaceLight,
+                borderColor: colors.cardBorder,
+                color: colors.text,
+              },
+            ]}
             multiline
             numberOfLines={3}
           />
 
-          <View style={styles.cardDivider} />
+          <View style={[styles.cardDivider, { backgroundColor: colors.divider }]} />
 
           {/* Джерело замовлення */}
           <TouchableOpacity
-            style={styles.sourceBox}
+            style={[
+              styles.sourceBox,
+              { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
+            ]}
             activeOpacity={0.75}
             onPress={() => setIsSourceModalOpen(true)}
           >
             <View>
-              <Text style={styles.sourceLabel}>Джерело замовлення</Text>
-              <Text style={styles.sourceValue}>{orderSource}</Text>
+              <Text style={[styles.sourceLabel, { color: colors.textSecondary }]}>
+                {t.booking.orderSource}
+              </Text>
+              <Text style={[styles.sourceValue, { color: colors.text }]}>{orderSource}</Text>
             </View>
-            <MaterialCommunityIcons name="menu-down" size={20} color="#8E8E93" />
+            <MaterialCommunityIcons name="menu-down" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </ScrollView>
 
       {/* 9. Фіксована нижня панель: "Зберегти" */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.divider }]}>
         <TouchableOpacity
           style={styles.saveButton}
           activeOpacity={0.85}
@@ -492,7 +589,7 @@ export default function NewBookingScreen() {
           ) : (
             <>
               <MaterialCommunityIcons name="content-save-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.saveButtonText}>Зберегти</Text>
+              <Text style={styles.saveButtonText}>{t.booking.saveBooking}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -501,31 +598,33 @@ export default function NewBookingScreen() {
       {/* Модальне вікно вибору послуг */}
       <Modal visible={isServiceModalOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Оберіть послугу</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {language === 'pl' ? 'Wybierz usługę' : 'Оберіть послугу'}
+              </Text>
               <TouchableOpacity onPress={() => setIsServiceModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={{ maxHeight: 350 }}>
-              {AVAILABLE_SERVICES.map((s) => {
+              {availableServices.map((s) => {
                 const isChecked = selectedServices.some((item) => item.id === s.id);
                 return (
                   <TouchableOpacity
                     key={s.id}
-                    style={styles.serviceModalItem}
+                    style={[styles.serviceModalItem, { borderBottomColor: colors.divider }]}
                     onPress={() => handleToggleService(s)}
                   >
                     <MaterialCommunityIcons
                       name={isChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
                       size={22}
-                      color={isChecked ? '#4CAF50' : '#8E8E93'}
+                      color={isChecked ? '#4CAF50' : colors.textSecondary}
                     />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.serviceModalName}>{s.name}</Text>
-                      <Text style={styles.serviceModalMeta}>{s.duration}</Text>
+                      <Text style={[styles.serviceModalName, { color: colors.text }]}>{s.name}</Text>
+                      <Text style={[styles.serviceModalMeta, { color: colors.textSecondary }]}>{s.duration}</Text>
                     </View>
                     <Text style={styles.serviceModalPrice}>{s.price} ₴</Text>
                   </TouchableOpacity>
@@ -537,7 +636,7 @@ export default function NewBookingScreen() {
               style={styles.modalDoneBtn}
               onPress={() => setIsServiceModalOpen(false)}
             >
-              <Text style={styles.modalDoneBtnText}>Готово</Text>
+              <Text style={styles.modalDoneBtnText}>{t.common.done}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -546,28 +645,37 @@ export default function NewBookingScreen() {
       {/* Модальне вікно вибору клієнта */}
       <Modal visible={isClientModalOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Оберіть клієнта</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t.booking.selectClient}</Text>
               <TouchableOpacity onPress={() => setIsClientModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             {/* Рядок пошуку клієнта */}
-            <View style={styles.clientModalSearchBox}>
-              <MaterialCommunityIcons name="magnify" size={20} color="#8E8E93" />
+            <View
+              style={[
+                styles.clientModalSearchBox,
+                { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
+              ]}
+            >
+              <MaterialCommunityIcons name="magnify" size={20} color={colors.textSecondary} />
               <TextInput
-                placeholder="Пошук за ім'ям, тегом або номером..."
-                placeholderTextColor="#8E8E93"
+                placeholder={
+                  language === 'pl'
+                    ? 'Szukaj po nazwisku, tagu lub telefonie...'
+                    : "Пошук за ім'ям, тегом або номером..."
+                }
+                placeholderTextColor={colors.textSecondary}
                 value={clientSearchQuery}
                 onChangeText={setClientSearchQuery}
-                style={styles.clientModalSearchInput}
+                style={[styles.clientModalSearchInput, { color: colors.text }]}
                 autoCapitalize="none"
               />
               {clientSearchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setClientSearchQuery('')}>
-                  <MaterialCommunityIcons name="close-circle" size={18} color="#8E8E93" />
+                  <MaterialCommunityIcons name="close-circle" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
@@ -575,30 +683,34 @@ export default function NewBookingScreen() {
             <ScrollView style={{ maxHeight: 350 }} keyboardShouldPersistTaps="handled">
               {!clientSearchQuery.trim() && (
                 <TouchableOpacity
-                  style={styles.clientModalItem}
+                  style={[styles.clientModalItem, { borderBottomColor: colors.divider }]}
                   onPress={() => {
                     setSelectedClient(null);
                     setIsClientModalOpen(false);
                   }}
                 >
-                  <MaterialCommunityIcons name="incognito" size={22} color="#8E8E93" />
-                  <Text style={styles.clientModalName}>Не обрано (Анонімний)</Text>
+                  <MaterialCommunityIcons name="incognito" size={22} color={colors.textSecondary} />
+                  <Text style={[styles.clientModalName, { color: colors.text }]}>
+                    {language === 'pl' ? 'Nie wybrano (Anonimowy)' : 'Не обрано (Анонімний)'}
+                  </Text>
                 </TouchableOpacity>
               )}
 
               {filteredClientsForModal.length === 0 ? (
                 <View style={{ padding: 24, alignItems: 'center' }}>
-                  <Text style={{ color: '#8E8E93', textAlign: 'center', fontSize: 13, lineHeight: 18 }}>
+                  <Text style={{ color: colors.textSecondary, textAlign: 'center', fontSize: 13, lineHeight: 18 }}>
                     {clientSearchQuery.trim()
-                      ? `Клієнтів не знайдено за запитом "${clientSearchQuery}"`
-                      : 'База клієнтів порожня.'}
+                      ? (language === 'pl'
+                          ? `Brak klientów dla zapytania "${clientSearchQuery}"`
+                          : `Клієнтів не знайдено за запитом "${clientSearchQuery}"`)
+                      : (language === 'pl' ? 'Baza klientów jest pusta.' : 'База клієнтів порожня.')}
                   </Text>
                 </View>
               ) : (
                 filteredClientsForModal.map((c: ClientItem) => (
                   <TouchableOpacity
                     key={c.id}
-                    style={styles.clientModalItem}
+                    style={[styles.clientModalItem, { borderBottomColor: colors.divider }]}
                     onPress={() => {
                       setSelectedClient(c);
                       setIsClientModalOpen(false);
@@ -608,13 +720,18 @@ export default function NewBookingScreen() {
                       <Text style={styles.modalClientLetter}>{c.name.charAt(0).toUpperCase()}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.clientModalName}>{c.name}</Text>
-                      <Text style={styles.clientModalPhone}>{c.cnCode} • {c.phone}</Text>
+                      <Text style={[styles.clientModalName, { color: colors.text }]}>{c.name}</Text>
+                      <Text style={[styles.clientModalPhone, { color: colors.textSecondary }]}>
+                        {c.cnCode} • {c.phone}
+                      </Text>
                       {c.tags && c.tags.length > 0 && (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                          {c.tags.map((t: string) => (
-                            <View key={t} style={styles.clientTagBadge}>
-                              <Text style={styles.clientTagText}>{t}</Text>
+                          {c.tags.map((tTag: string) => (
+                            <View
+                              key={tTag}
+                              style={[styles.clientTagBadge, { backgroundColor: colors.surfaceLight }]}
+                            >
+                              <Text style={[styles.clientTagText, { color: colors.textSecondary }]}>{tTag}</Text>
                             </View>
                           ))}
                         </View>
@@ -631,36 +748,52 @@ export default function NewBookingScreen() {
       {/* Модальне вікно створення клієнта */}
       <Modal visible={isCreateClientOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Створити нового клієнта</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {language === 'pl' ? 'Dodaj nowego klienta' : 'Створити нового клієнта'}
+              </Text>
               <TouchableOpacity onPress={() => setIsCreateClientOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             <TextInput
-              placeholder="Ім'я та прізвище"
-              placeholderTextColor="#8E8E93"
+              placeholder={language === 'pl' ? 'Imię i nazwisko' : "Ім'я та прізвище"}
+              placeholderTextColor={colors.textSecondary}
               value={newClientName}
               onChangeText={setNewClientName}
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.surfaceLight,
+                  borderColor: colors.cardBorder,
+                  color: colors.text,
+                },
+              ]}
             />
 
             <TextInput
-              placeholder="Номер телефону (+380...)"
-              placeholderTextColor="#8E8E93"
+              placeholder={language === 'pl' ? 'Numer telefonu (+48...)' : 'Номер телефону (+380...)'}
+              placeholderTextColor={colors.textSecondary}
               value={newClientPhone}
               onChangeText={setNewClientPhone}
               keyboardType="phone-pad"
-              style={styles.modalInput}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: colors.surfaceLight,
+                  borderColor: colors.cardBorder,
+                  color: colors.text,
+                },
+              ]}
             />
 
             <TouchableOpacity
               style={styles.modalDoneBtn}
               onPress={handleCreateNewClient}
             >
-              <Text style={styles.modalDoneBtnText}>Зберегти клієнта</Text>
+              <Text style={styles.modalDoneBtnText}>{t.clients.saveClient}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -669,24 +802,30 @@ export default function NewBookingScreen() {
       {/* Модальне вікно вибору джерела */}
       <Modal visible={isSourceModalOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Джерело замовлення</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t.booking.orderSource}</Text>
               <TouchableOpacity onPress={() => setIsSourceModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            {ORDER_SOURCES.map((src) => (
+            {orderSourcesList.map((src) => (
               <TouchableOpacity
                 key={src}
-                style={styles.sourceOptionItem}
+                style={[styles.sourceOptionItem, { borderBottomColor: colors.divider }]}
                 onPress={() => {
                   setOrderSource(src);
                   setIsSourceModalOpen(false);
                 }}
               >
-                <Text style={[styles.sourceOptionText, orderSource === src && { color: '#4CAF50', fontWeight: '700' }]}>
+                <Text
+                  style={[
+                    styles.sourceOptionText,
+                    { color: colors.text },
+                    orderSource === src && { color: '#4CAF50', fontWeight: '700' },
+                  ]}
+                >
                   {src}
                 </Text>
                 {orderSource === src && (
@@ -701,11 +840,11 @@ export default function NewBookingScreen() {
       {/* Модальне вікно вибору майстра (відкидний список) */}
       <Modal visible={isMasterModalOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Оберіть майстра</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>{t.booking.selectMaster}</Text>
               <TouchableOpacity onPress={() => setIsMasterModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -713,6 +852,7 @@ export default function NewBookingScreen() {
               <TouchableOpacity
                 style={[
                   styles.masterModalItem,
+                  { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
                   selectedMaster === null && styles.masterModalItemActive,
                 ]}
                 onPress={() => {
@@ -721,10 +861,18 @@ export default function NewBookingScreen() {
                 }}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.masterModalName, selectedMaster === null && { color: '#34D399' }]}>
-                    Не обрано
+                  <Text
+                    style={[
+                      styles.masterModalName,
+                      { color: colors.text },
+                      selectedMaster === null && { color: '#34D399' },
+                    ]}
+                  >
+                    {language === 'pl' ? 'Nie wybrano' : 'Не обрано'}
                   </Text>
-                  <Text style={styles.masterModalRole}>Майстра не вибрано</Text>
+                  <Text style={[styles.masterModalRole, { color: colors.textSecondary }]}>
+                    {language === 'pl' ? 'Pracownik nie został wybrany' : 'Майстра не вибрано'}
+                  </Text>
                 </View>
                 {selectedMaster === null && (
                   <MaterialCommunityIcons name="check" size={22} color="#34D399" />
@@ -738,6 +886,7 @@ export default function NewBookingScreen() {
                     key={m.id}
                     style={[
                       styles.masterModalItem,
+                      { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
                       isSelected && styles.masterModalItemActive,
                     ]}
                     onPress={() => {
@@ -746,10 +895,18 @@ export default function NewBookingScreen() {
                     }}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.masterModalName, isSelected && { color: '#34D399' }]}>
+                      <Text
+                        style={[
+                          styles.masterModalName,
+                          { color: colors.text },
+                          isSelected && { color: '#34D399' },
+                        ]}
+                      >
                         {m.name}
                       </Text>
-                      <Text style={styles.masterModalRole}>{m.specialty}</Text>
+                      <Text style={[styles.masterModalRole, { color: colors.textSecondary }]}>
+                        {m.specialty}
+                      </Text>
                     </View>
                     {isSelected && (
                       <MaterialCommunityIcons name="check" size={22} color="#34D399" />
@@ -765,19 +922,22 @@ export default function NewBookingScreen() {
       {/* Модальне вікно вибору дати (календар) та години */}
       <Modal visible={isTimeModalOpen} transparent animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             {/* Ручка шторки */}
             <View style={styles.modalDragHandle} />
 
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>Оберіть дату та час</Text>
-                <Text style={styles.modalSubtitle}>
-                  {selectedMaster ? `${selectedMaster.name} • ` : ''}{formatDisplayDate(bookingDate)}
+                <Text style={[styles.modalTitle, { color: colors.text }]}>
+                  {language === 'pl' ? 'Wybierz datę i godzinę' : 'Оберіть дату та час'}
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+                  {selectedMaster ? `${selectedMaster.name} • ` : ''}
+                  {formatDisplayDate(bookingDate, language)}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setIsTimeModalOpen(false)} style={styles.modalCloseBtn}>
-                <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+                <MaterialCommunityIcons name="close" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -786,19 +946,22 @@ export default function NewBookingScreen() {
               <View style={styles.calendarContainer}>
                 <View style={styles.calendarHeaderRow}>
                   <TouchableOpacity onPress={handlePrevMonth} style={styles.calendarNavBtn}>
-                    <MaterialCommunityIcons name="chevron-left" size={22} color="#FFFFFF" />
+                    <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text} />
                   </TouchableOpacity>
-                  <Text style={styles.calendarMonthText}>
-                    {UKR_MONTHS_NAMES[calendarMonth]} {calendarYear} р.
+                  <Text style={[styles.calendarMonthText, { color: colors.text }]}>
+                    {language === 'pl' ? PL_MONTHS_NAMES[calendarMonth] : UKR_MONTHS_NAMES[calendarMonth]}{' '}
+                    {calendarYear} {language === 'pl' ? 'r.' : 'р.'}
                   </Text>
                   <TouchableOpacity onPress={handleNextMonth} style={styles.calendarNavBtn}>
-                    <MaterialCommunityIcons name="chevron-right" size={22} color="#FFFFFF" />
+                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text} />
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.calendarWeekdaysRow}>
-                  {WEEKDAY_NAMES.map((d) => (
-                    <Text key={d} style={styles.calendarWeekdayText}>{d}</Text>
+                  {(language === 'pl' ? PL_WEEKDAY_NAMES : WEEKDAY_NAMES).map((d) => (
+                    <Text key={d} style={[styles.calendarWeekdayText, { color: colors.textSecondary }]}>
+                      {d}
+                    </Text>
                   ))}
                 </View>
 
@@ -826,6 +989,7 @@ export default function NewBookingScreen() {
                         <Text
                           style={[
                             styles.calendarDayText,
+                            { color: colors.text },
                             isSel && styles.calendarDayTextSelected,
                             isToday && !isSel && styles.calendarDayTextToday,
                           ]}
@@ -841,12 +1005,12 @@ export default function NewBookingScreen() {
               {/* Заголовок блоку годин */}
               <View style={styles.timeSectionHeaderRow}>
                 <MaterialCommunityIcons name="clock-outline" size={16} color="#34D399" />
-                <Text style={styles.timeSectionTitle}>
-                  Вільні години на обраний день:
+                <Text style={[styles.timeSectionTitle, { color: colors.text }]}>
+                  {language === 'pl' ? 'Dostępne godziny na wybrany dzień:' : 'Вільні години на обраний день:'}
                 </Text>
               </View>
 
-              {/* Сітка годин у 3 колонки (чиста, лаконічна, без емодзі) */}
+              {/* Сітка годин у 3 колонки */}
               <View style={styles.timeSlotsGrid}>
                 {AVAILABLE_TIME_SLOTS.map((slot) => {
                   const conflict = selectedMaster
@@ -860,6 +1024,7 @@ export default function NewBookingScreen() {
                       key={slot}
                       style={[
                         styles.timeSlotPill,
+                        { backgroundColor: colors.surfaceLight, borderColor: colors.cardBorder },
                         isSelected && !isOccupied && styles.timeSlotPillSelected,
                         isOccupied && styles.timeSlotPillOccupied,
                       ]}
@@ -867,8 +1032,10 @@ export default function NewBookingScreen() {
                       onPress={() => {
                         if (isOccupied) {
                           Alert.alert(
-                            'Час вже зайнятий!',
-                            `У майстра ${selectedMaster?.name} о ${slot} (${formatDisplayDate(bookingDate)}) вже є запис: "${conflict?.serviceName}" (${conflict?.clientName}).\n\nБудь ласка, оберіть іншу годину.`
+                            t.booking.slotConflict,
+                            language === 'pl'
+                              ? `U pracownika ${selectedMaster?.name} o ${slot} (${formatDisplayDate(bookingDate, language)}) jest już wizyta: "${conflict?.serviceName}" (${conflict?.clientName}).\n\nProszę wybrać inną godzinę.`
+                              : `У майстра ${selectedMaster?.name} о ${slot} (${formatDisplayDate(bookingDate, language)}) вже є запис: "${conflict?.serviceName}" (${conflict?.clientName}).\n\nБудь ласка, оберіть іншу годину.`
                           );
                           return;
                         }
@@ -878,6 +1045,7 @@ export default function NewBookingScreen() {
                       <Text
                         style={[
                           styles.timeSlotPillText,
+                          { color: colors.text },
                           isSelected && !isOccupied && styles.timeSlotPillTextSelected,
                           isOccupied && styles.timeSlotPillTextOccupied,
                         ]}
@@ -886,7 +1054,9 @@ export default function NewBookingScreen() {
                       </Text>
 
                       {isOccupied ? (
-                        <Text style={styles.timeSlotOccupiedBadge}>Зайнято</Text>
+                        <Text style={styles.timeSlotOccupiedBadge}>
+                          {language === 'pl' ? 'Zajęte' : 'Зайнято'}
+                        </Text>
                       ) : isSelected ? (
                         <MaterialCommunityIcons name="check" size={15} color="#FFFFFF" />
                       ) : null}
@@ -904,7 +1074,9 @@ export default function NewBookingScreen() {
             >
               <MaterialCommunityIcons name="check" size={18} color="#FFFFFF" />
               <Text style={styles.modalConfirmBtnText}>
-                Підтвердити час: {bookingTime}
+                {language === 'pl'
+                  ? `Potwierdź godzinę: ${bookingTime}`
+                  : `Підтвердити час: ${bookingTime}`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -918,7 +1090,9 @@ export default function NewBookingScreen() {
         style={{ backgroundColor: '#133E1D' }}
       >
         <Text style={{ color: '#34D399', fontWeight: 'bold' }}>
-          ✓ Запис успішно збережено в розклад!
+          {language === 'pl'
+            ? '✓ Rezerwacja została pomyślnie dodana!'
+            : '✓ Запис успішно збережено в розклад!'}
         </Text>
       </Snackbar>
     </View>

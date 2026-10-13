@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { OrderItem } from '../services/mockData';
+import { useAppSettings } from '../context/AppSettingsContext';
 
 interface OrderCardProps {
   order: OrderItem;
@@ -14,6 +15,8 @@ interface OrderCardProps {
  * Зона відповідальності: Розробник 2 (Артем Г)
  */
 export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
+  const { colors, t } = useAppSettings();
+
   // Форматування суми
   const formatMoney = (val: number) => {
     const parts = val.toFixed(2).split('.');
@@ -26,28 +29,28 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
       case 'COMPLETED':
         return {
           icon: 'check',
-          text: 'Завершено',
+          text: t.cashier.completed,
           bg: '#0E3D1E',
           color: '#4CAF50',
         };
       case 'UNPAID':
         return {
           icon: 'alert-circle-outline',
-          text: 'Не сплачено',
+          text: t.cashier.unpaid,
           bg: '#3B2A08',
           color: '#F59E0B',
         };
       case 'CANCELLED':
         return {
           icon: 'close',
-          text: 'Скасовано',
+          text: t.cashier.cancelled,
           bg: '#3B1212',
           color: '#EF4444',
         };
       default:
         return {
           icon: 'clock-outline',
-          text: 'В обробці',
+          text: t.cashier.unpaid,
           bg: '#242428',
           color: '#A1A1AA',
         };
@@ -57,11 +60,17 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
   const badge = getStatusBadge();
 
   return (
-    <TouchableOpacity activeOpacity={0.88} onPress={onPress} style={styles.card}>
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      style={[styles.card, { backgroundColor: colors.surface }]}
+    >
       {/* 1. Верхній рядок: Номер замовлення + Стрілочка */}
       <View style={styles.headerRow}>
-        <Text style={styles.orderTitle}>Замовлення {order.orderNumber}</Text>
-        <MaterialCommunityIcons name="chevron-right" size={24} color="#8E8E93" />
+        <Text style={[styles.orderTitle, { color: colors.text }]}>
+          {t.cashier.order} {order.orderNumber}
+        </Text>
+        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </View>
 
       {/* 2. Бейдж статусу (наприклад, ✓ Завершено) */}
@@ -71,48 +80,48 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
       </View>
 
       {/* Розділювач */}
-      <View style={styles.divider} />
+      <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
       {/* 3. Деталі (Створено, Клієнт, Касир, Кількість, Всього) */}
       <View style={styles.detailsList}>
         {/* Створено */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Створено</Text>
-          <Text style={styles.valueCol}>{order.date}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.created}</Text>
+          <Text style={[styles.valueCol, { color: colors.text }]}>{order.date}</Text>
         </View>
 
         {/* Клієнт */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Клієнт</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.booking.client}</Text>
           <View style={styles.personBox}>
             <View style={[styles.avatarDot, { backgroundColor: '#8B5CF6' }]}>
               <MaterialCommunityIcons name="account" size={11} color="#FFFFFF" />
             </View>
-            <Text style={styles.personName}>{order.clientName}</Text>
+            <Text style={[styles.personName, { color: colors.text }]}>{order.clientName}</Text>
           </View>
         </View>
 
         {/* Адміністратор */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Адміністратор</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.admin}</Text>
           <View style={styles.personBox}>
             <View style={[styles.avatarDot, { backgroundColor: '#10B981' }]}>
               <MaterialCommunityIcons name="shield-account" size={12} color="#FFFFFF" />
             </View>
-            <Text style={styles.personName}>{order.cashierName}</Text>
+            <Text style={[styles.personName, { color: colors.text }]}>{order.cashierName}</Text>
           </View>
         </View>
 
         {/* Кількість */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Кількість</Text>
-          <Text style={styles.valueCol}>{order.itemsCount}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.items}</Text>
+          <Text style={[styles.valueCol, { color: colors.text }]}>{order.itemsCount}</Text>
         </View>
 
         {/* Всього */}
         <View style={styles.detailRow}>
-          <Text style={styles.labelCol}>Всього</Text>
-          <Text style={styles.totalAmountText}>{formatMoney(order.totalAmount)}</Text>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.total}</Text>
+          <Text style={[styles.totalAmountText, { color: colors.text }]}>{formatMoney(order.totalAmount)}</Text>
         </View>
       </View>
     </TouchableOpacity>
