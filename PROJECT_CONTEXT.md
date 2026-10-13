@@ -27,13 +27,13 @@
 |---|---|---|---|
 | **Розробник 1 (Частина 1)** | `Ihor` | `igor2007nam@gmail.com` | Архітектура, авторизація, сітка календаря розкладу, сенсор акселерометра та свайпи |
 | **Розробник 2 (Частина 2)** | `Artem H` | `gizovskijartem@gmail.com` | Каса і чеки (Замовлення), CRM база клієнтів, Нове бронювання, камера, mockData/API, полірування інтерфейсів |
-| **Розробник 3 (Частина 3)** | `Artem L` | *(буде додано)* | Завершальна фінальна частина функціоналу та доопрацювання |
+| **Розробник 3 (Частина 3)** | `Artem Labunskyi` | `yourstruly6v@gmail.com` | Локалізація (PL/UA), світла/темна теми, екран персоналу та ролей, 100% реальна аналітика, зарплата майстра (75%), сувора ізоляція ролей |
 
 > ⚠️ **Важливо при створенні комітів:**
 > Перемикайте автора в Git відповідно до того, чия частина розробляється:
 > ```bash
-> git config user.name "Artem H"
-> git config user.email "gizovskijartem@gmail.com"
+> git config user.name "Artem Labunskyi"
+> git config user.email "yourstruly6v@gmail.com"
 > ```
 
 ---
@@ -55,6 +55,12 @@
 11. `d8ab828` **Artem H** — `feat(api): post booking creation and put appointment completion endpoints`
 12. `9909526` **Artem H** — `feat(ui): redesign booking, clients crm, and cashier screens to match EasyWeek layouts`
 13. `d6f91c1` **Ihor** — `feat(sensors): accelerometer tilt flick and screen swipe gestures for calendar date switching`
+14. `e49dc3c` **Ihor** — `feat(calendar,login,cashier): sync payments, add date picker modal, attach grid to masters, and rebrand login`
+15. `fea7a3c` **Artem Labunskyi** — `feat(i18n,theme): add multilingual support (pl/ua) and dark/light theme switching with app context`
+16. `77a1a49` **Artem Labunskyi** — `feat(staff): add staff management screen with real role assignment and approval polling`
+17. `d7f57bc` **Artem Labunskyi** — `feat(salary): implement master salary dashboard with individual 75% commission calculation`
+18. `66ba6a1` **Artem Labunskyi** — `feat(analytics): add real-time statistics dashboard with dynamic month filtering and 5 booking sources`
+19. `2655b55` **Artem Labunskyi** — `feat(roles): enforce strict master role isolation in calendar, tabs navigation, and settings`
 
 ---
 
