@@ -14,7 +14,7 @@
       "shortName": "Ігор Н.",
       "specialty": "Майстер",
       "avatarUrl": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&h=100&fit=crop&crop=faces",
-      "appointmentCount": 0
+      "appointmentCount": 2
     },
     {
       "id": "master-3",
@@ -22,7 +22,7 @@
       "shortName": "Артем Л.",
       "specialty": "Майстер",
       "avatarUrl": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces",
-      "appointmentCount": 1
+      "appointmentCount": 3
     }
   ],
   "clients": [
@@ -134,6 +134,74 @@
   ],
   "bookings": [
     {
+      "id": "b-1791931062116",
+      "masterId": "master-2",
+      "clientName": "Арсен маркарян",
+      "clientPhone": "+487931607790",
+      "serviceName": "Kompleksowy manicure + hybryda",
+      "notes": "",
+      "date": "2026-11-01",
+      "startTime": "12:00",
+      "endTime": "13:30",
+      "price": 700,
+      "colorType": "green",
+      "hasPayment": false,
+      "hasComment": false,
+      "isConfirmed": true,
+      "source": "Rezerwacja online"
+    },
+    {
+      "id": "b-1791927595711",
+      "masterId": "master-2",
+      "clientName": "Арсен маркарян",
+      "clientPhone": "+487931607790",
+      "serviceName": "Комплексний манікюр + покриття, Нарощування нігтів (гелеве), Апаратний педикюр, Зняття + гігієнічний манікюр, Дизайн нігтів (складний розпис)",
+      "notes": "",
+      "date": "2026-10-15",
+      "startTime": "17:00",
+      "endTime": "18:30",
+      "price": 3350,
+      "colorType": "green",
+      "hasPayment": true,
+      "hasComment": false,
+      "isConfirmed": true,
+      "source": "По телефону"
+    },
+    {
+      "id": "b-1791900299093",
+      "masterId": "master-3",
+      "clientName": "Нігамен",
+      "clientPhone": "+380 67 000 0000",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "коментарь",
+      "date": "2026-10-14",
+      "startTime": "13:00",
+      "endTime": "14:30",
+      "price": 700,
+      "colorType": "green",
+      "hasPayment": true,
+      "hasComment": true,
+      "isConfirmed": true,
+      "source": "Instagram"
+    },
+    {
+      "id": "b-1791900243447",
+      "masterId": "master-3",
+      "clientName": "Нігамен",
+      "clientPhone": "+380 67 000 0000",
+      "serviceName": "Комплексний манікюр + покриття",
+      "notes": "коментарь",
+      "date": "2026-10-14",
+      "startTime": "09:00",
+      "endTime": "10:30",
+      "price": 700,
+      "colorType": "green",
+      "hasPayment": true,
+      "hasComment": true,
+      "isConfirmed": true,
+      "source": "По телефону"
+    },
+    {
       "id": "b-1791718866612",
       "masterId": "master-3",
       "clientName": "Анонімний клієнт",
@@ -147,7 +215,8 @@
       "colorType": "green",
       "hasPayment": true,
       "hasComment": false,
-      "isConfirmed": true
+      "isConfirmed": true,
+      "source": "На місці"
     },
     {
       "id": "b-1791716552358",
@@ -161,9 +230,10 @@
       "endTime": "14:30",
       "price": 700,
       "colorType": "green",
-      "hasPayment": false,
+      "hasPayment": true,
       "hasComment": false,
-      "isConfirmed": true
+      "isConfirmed": true,
+      "source": "Viber"
     },
     {
       "id": "b-1791713169593",
@@ -179,7 +249,8 @@
       "colorType": "mustard",
       "hasPayment": false,
       "hasComment": false,
-      "isConfirmed": true
+      "isConfirmed": true,
+      "source": "Instagram"
     },
     {
       "id": "b-1791711550812",
@@ -195,10 +266,71 @@
       "colorType": "green",
       "hasPayment": true,
       "hasComment": false,
-      "isConfirmed": true
+      "isConfirmed": true,
+      "source": "По телефону"
     }
   ],
   "orders": [
+    {
+      "id": "ord-b-1791931062116",
+      "orderNumber": "№1007",
+      "status": "UNPAID",
+      "date": "2026-11-01 12:00",
+      "clientName": "Арсен маркарян",
+      "clientPhone": "+487931607790",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Kompleksowy manicure + hybryda"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
+    {
+      "id": "ord-b-1791927595711",
+      "orderNumber": "№1006",
+      "status": "COMPLETED",
+      "date": "2026-10-15 17:00",
+      "clientName": "Арсен маркарян",
+      "clientPhone": "+487931607790",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття, Нарощування нігтів (гелеве), Апаратний педикюр, Зняття + гігієнічний манікюр, Дизайн нігтів (складний розпис)"
+      ],
+      "totalAmount": 3350,
+      "paymentMethod": "CARD"
+    },
+    {
+      "id": "ord-b-1791900299093",
+      "orderNumber": "№1005",
+      "status": "COMPLETED",
+      "date": "2026-10-14 13:00",
+      "clientName": "Нігамен",
+      "clientPhone": "+380 67 000 0000",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
+    {
+      "id": "ord-b-1791900243447",
+      "orderNumber": "№1004",
+      "status": "COMPLETED",
+      "date": "2026-10-14 09:00",
+      "clientName": "Нігамен",
+      "clientPhone": "+380 67 000 0000",
+      "cashierName": "Артем Гіжовський (Адміністратор)",
+      "itemsCount": 1,
+      "services": [
+        "Комплексний манікюр + покриття"
+      ],
+      "totalAmount": 700,
+      "paymentMethod": "CARD"
+    },
     {
       "id": "ord-b-1791718866612",
       "orderNumber": "№1003",
@@ -258,6 +390,72 @@
       ],
       "totalAmount": 700,
       "paymentMethod": "CARD"
+    }
+  ],
+  "users": [
+    {
+      "id": "user-admin-1",
+      "firstName": "Артем",
+      "lastName": "Гіжовський",
+      "email": "admin@svoya.ua",
+      "phone": "+380 68 111 2233",
+      "role": "ADMIN"
+    },
+    {
+      "id": "user-master-1",
+      "firstName": "Артем",
+      "lastName": "Гіжовський",
+      "email": "artem@svoya.ua",
+      "phone": "+380 68 931 7049",
+      "role": "MASTER"
+    },
+    {
+      "id": "user-ihor-1",
+      "firstName": "Ігор",
+      "lastName": "Намачинський",
+      "email": "ihor@svoya.ua",
+      "phone": "+380 67 123 4567",
+      "role": "MASTER"
+    },
+    {
+      "id": "user-labunskyi-1",
+      "firstName": "Артем",
+      "lastName": "Лабунський",
+      "email": "labunskyi@svoya.ua",
+      "phone": "+380 67 987 6543",
+      "role": "MASTER"
+    },
+    {
+      "id": "user-master-veronika",
+      "firstName": "Вероніка",
+      "lastName": "Гіжовська",
+      "email": "veronika@svoya.ua",
+      "phone": "+380 67 222 3344",
+      "role": "MASTER"
+    },
+    {
+      "id": "user-master-yulia",
+      "firstName": "Юлія",
+      "lastName": "Півень",
+      "email": "yulia@svoya.ua",
+      "phone": "+380 67 333 4455",
+      "role": "MASTER"
+    },
+    {
+      "id": "user-pending-1",
+      "firstName": "Оксана",
+      "lastName": "Кравченко",
+      "email": "oksana@svoya.ua",
+      "phone": "+380 67 999 8877",
+      "role": "PENDING"
+    },
+    {
+      "id": "user-pending-2",
+      "firstName": "Дарина",
+      "lastName": "Сидоренко",
+      "email": "daryna@svoya.ua",
+      "phone": "+380 50 123 4567",
+      "role": "PENDING"
     }
   ]
 }

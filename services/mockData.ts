@@ -22,6 +22,7 @@ export interface AppointmentItem {
   hasPayment?: boolean;
   hasComment?: boolean;
   isConfirmed?: boolean;
+  source?: string;
 }
 
 // Майстри салону - розробники проекту (Студенти)
