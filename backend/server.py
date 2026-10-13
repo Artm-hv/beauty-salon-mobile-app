@@ -108,6 +108,15 @@ class ApiHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, db.get('orders', []))
         elif path == '/api/masters':
             self._send_json(200, db.get('masters', []))
+        elif path == '/api/users':
+            self._send_json(200, db.get('users', []))
+        elif path.startswith('/api/users/'):
+            user_id = path.replace('/api/users/', '').split('/')[0]
+            matched = next((u for u in db.get('users', []) if u.get('id') == user_id), None)
+            if matched:
+                self._send_json(200, matched)
+            else:
+                self._send_json(404, {"error": "User not found"})
         elif path == '/api/health':
             self._send_json(200, {"status": "ok", "app": "Svoya Nail Studio Backend"})
         else:
@@ -163,6 +172,20 @@ class ApiHandler(http.server.BaseHTTPRequestHandler):
             orders.insert(0, data)
             save_db(db)
             self._send_json(201, data)
+
+        elif path in ['/api/auth/register', '/api/users']:
+            users = db.setdefault('users', [])
+            new_user = {
+                'id': data.get('id', f"user-{int(time.time() * 1000)}"),
+                'firstName': data.get('firstName', ''),
+                'lastName': data.get('lastName', ''),
+                'email': data.get('email', '').lower(),
+                'phone': data.get('phone', ''),
+                'role': data.get('role', 'PENDING')
+            }
+            users.insert(0, new_user)
+            save_db(db)
+            self._send_json(201, {'success': True, 'user': new_user})
 
         elif path == '/api/reset':
             # Скидання до початкового чистого стану
@@ -229,6 +252,22 @@ class ApiHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json(200, {"success": True, "data": updated})
             else:
                 self._send_json(404, {"error": "Booking not found"})
+
+        elif path.startswith('/api/users/'):
+            user_id = path.replace('/api/users/', '').split('/')[0]
+            updated = None
+            for u in db.get('users', []):
+                if u.get('id') == user_id:
+                    if 'role' in data:
+                        u['role'] = data['role']
+                    updated = u
+                    break
+
+            if updated:
+                save_db(db)
+                self._send_json(200, {"success": True, "data": updated})
+            else:
+                self._send_json(404, {"error": "User not found"})
 
         elif path.startswith('/api/orders/'):
             order_id = path.replace('/api/orders/', '')

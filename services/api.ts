@@ -7,6 +7,7 @@ import {
   ClientItem,
   Master,
 } from './mockData';
+import { User, UserRole } from '../constants/types';
 
 /**
  * Автоматичне визначення базової адреси REST API
@@ -343,6 +344,13 @@ export const apiClient = {
   },
 
   /**
+   * Аліас для отримання бронювань (GET /api/bookings)
+   */
+  getBookings: async (): Promise<AppointmentItem[]> => {
+    return apiClient.getAppointments();
+  },
+
+  /**
    * 2. Метод POST: Створення нового бронювання / візиту (POST /api/bookings)
    */
   createBooking: async (bookingData: {
@@ -356,6 +364,7 @@ export const apiClient = {
     price: number;
     notes?: string;
     colorType?: 'mustard' | 'green' | 'red' | 'blue';
+    source?: string;
   }): Promise<{ success: boolean; data: AppointmentItem }> => {
     const appointmentId = `b-${Date.now()}`;
     const newAppointment: AppointmentItem = {
@@ -373,6 +382,7 @@ export const apiClient = {
       hasPayment: false,
       hasComment: !!bookingData.notes,
       isConfirmed: true,
+      source: bookingData.source || 'Instagram',
     };
 
     // Автоматичне створення чека в касі для відповідності операції
@@ -558,5 +568,46 @@ export const apiClient = {
     memoryAppointments = [];
     memoryOrders = [];
     persistState();
+  },
+
+  /**
+   * 4. Отримання списку співробітників (GET /api/users)
+   */
+  getUsers: async (): Promise<User[]> => {
+    try {
+      const response = await fetchWithFallback('/users', { method: 'GET' });
+      if (response) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) return data;
+      }
+    } catch {}
+    return [
+      { id: 'user-admin-1', firstName: 'Артем', lastName: 'Гіжовський', email: 'admin@svoya.ua', phone: '+380 68 111 2233', role: 'ADMIN' },
+      { id: 'user-master-1', firstName: 'Артем', lastName: 'Гіжовський', email: 'artem@svoya.ua', phone: '+380 68 931 7049', role: 'MASTER' },
+      { id: 'user-ihor-1', firstName: 'Ігор', lastName: 'Намачинський', email: 'ihor@svoya.ua', phone: '+380 67 123 4567', role: 'MASTER' },
+      { id: 'user-labunskyi-1', firstName: 'Артем', lastName: 'Лабунський', email: 'labunskyi@svoya.ua', phone: '+380 67 987 6543', role: 'MASTER' },
+      { id: 'user-master-veronika', firstName: 'Вероніка', lastName: 'Гіжовська', email: 'veronika@svoya.ua', phone: '+380 67 222 3344', role: 'MASTER' },
+      { id: 'user-master-yulia', firstName: 'Юлія', lastName: 'Півень', email: 'yulia@svoya.ua', phone: '+380 67 333 4455', role: 'MASTER' },
+      { id: 'user-pending-1', firstName: 'Оксана', lastName: 'Кравченко', email: 'oksana@svoya.ua', phone: '+380 67 999 8877', role: 'PENDING' },
+      { id: 'user-pending-2', firstName: 'Дарина', lastName: 'Сидоренко', email: 'daryna@svoya.ua', phone: '+380 50 123 4567', role: 'PENDING' },
+    ];
+  },
+
+  /**
+   * 5. Оновлення ролі співробітника (PUT /api/users/:id)
+   */
+  updateUserRole: async (userId: string, role: UserRole): Promise<{ success: boolean; data?: User }> => {
+    try {
+      const response = await fetchWithFallback(`/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      if (response) {
+        const resData = await response.json();
+        return resData;
+      }
+    } catch {}
+    return { success: true };
   },
 };

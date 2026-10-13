@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Surface, Button, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Colors } from '../constants/colors';
+import { useAppSettings } from '../context/AppSettingsContext';
 import { authService } from '../services/authService';
+import { apiClient } from '../services/api';
 
 /**
  * Екран 2: Очікування підтвердження ролі (WaitingForRoleScreen)
@@ -12,29 +13,46 @@ import { authService } from '../services/authService';
  */
 export default function WaitingForRoleScreen() {
   const router = useRouter();
+  const { colors, t } = useAppSettings();
   const currentUser = authService.getCurrentUser();
 
   const [checking, setChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  // Перевірка статусу ролі (polling)
+  // Реальна перевірка статусу ролі (polling через API)
   const handleCheckStatus = async () => {
     setChecking(true);
     setStatusMessage('');
 
-    // Імітація запиту до GET /api/auth/me або перевірки профілю
-    setTimeout(() => {
-      setChecking(false);
-      const user = authService.getCurrentUser();
+    try {
+      const allUsers = await apiClient.getUsers();
+      const current = currentUser || authService.getCurrentUser();
+      const me = allUsers.find(
+        (u) =>
+          u.id === current?.id ||
+          (current?.email && u.email.toLowerCase() === current.email.toLowerCase())
+      );
 
-      if (user && user.role !== 'PENDING') {
-        // Роль надано (MASTER або ADMIN) -> перехід у робочий простір
-        router.replace('/(tabs)/calendar');
-      } else {
-        setStatusMessage('Роль ще не призначено. Обліковий запис очікує підтвердження адміністратора.');
+      if (me) {
+        authService.setCurrentUser(me);
+        if (me.role !== 'PENDING') {
+          setChecking(false);
+          router.replace('/(tabs)/calendar');
+          return;
+        }
       }
-    }, 800);
+    } catch {}
+
+    setChecking(false);
+    setStatusMessage(t.waiting.pendingNotice);
   };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleCheckStatus();
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
 
   // Демо-функція для захисту перед викладачем: імітація надання ролі адміністратором
   const handleSimulateRoleApproved = () => {
@@ -54,46 +72,63 @@ export default function WaitingForRoleScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Surface style={styles.contentCard} elevation={2}>
-        <View style={styles.iconCircle}>
-          <MaterialCommunityIcons name="clock-time-five-outline" size={56} color={Colors.primary} />
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+      <Surface
+        style={[
+          styles.contentCard,
+          { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
+        ]}
+        elevation={2}
+      >
+        <View style={[styles.iconCircle, { backgroundColor: colors.surfaceLight }]}>
+          <MaterialCommunityIcons name="clock-time-five-outline" size={56} color={colors.primary} />
         </View>
 
         <Badge style={styles.pendingBadge} size={28}>
-          СТАТУС: ОЧІКУЄ ПІДТВЕРДЖЕННЯ
+          {t.waiting.statusBadge}
         </Badge>
 
-        <Text variant="headlineSmall" style={styles.title}>
-          Очікування підтвердження ролі
+        <Text variant="headlineSmall" style={[styles.title, { color: colors.text }]}>
+          {t.waiting.title}
         </Text>
 
-        <Text variant="bodyMedium" style={styles.description}>
-          Ваш обліковий запис успішно зареєстровано в системі салону{' '}
-          <Text style={styles.boldText}>"Svoya Nail Studio"</Text>.
+        <Text variant="bodyMedium" style={[styles.description, { color: colors.textSecondary }]}>
+          {t.waiting.description1}
+          <Text style={[styles.boldText, { color: colors.primary }]}>{t.waiting.studioName}</Text>.
         </Text>
 
-        <Text variant="bodyMedium" style={styles.subDescription}>
-          З міркувань безпеки доступ до розкладу та бази клієнтів надається лише після перевірки
-          адміністратором. Будь ласка, зверніться до керівника або зачекайте активації.
+        <Text variant="bodyMedium" style={[styles.subDescription, { color: colors.textSecondary }]}>
+          {t.waiting.description2}
         </Text>
 
         {currentUser && (
-          <Surface style={styles.userInfoBox} elevation={0}>
-            <Text variant="labelMedium" style={styles.userLabel}>
-              Обліковий запис:
+          <Surface
+            style={[
+              styles.userInfoBox,
+              { backgroundColor: colors.surfaceLight, borderColor: colors.divider },
+            ]}
+            elevation={0}
+          >
+            <Text variant="labelMedium" style={[styles.userLabel, { color: colors.textSecondary }]}>
+              {t.waiting.accountLabel}
             </Text>
-            <Text variant="bodyMedium" style={styles.userName}>
+            <Text variant="bodyMedium" style={[styles.userName, { color: colors.text }]}>
               {currentUser.firstName} {currentUser.lastName}
             </Text>
-            <Text variant="bodySmall" style={styles.userEmail}>
+            <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
               {currentUser.email}
             </Text>
           </Surface>
         )}
 
         {!!statusMessage && (
-          <Text variant="bodySmall" style={styles.statusNotice}>
+          <Text
+            variant="bodySmall"
+            style={[
+              styles.statusNotice,
+              { backgroundColor: colors.surfaceLight, color: colors.primary },
+            ]}
+          >
             {statusMessage}
           </Text>
         )}
@@ -105,9 +140,10 @@ export default function WaitingForRoleScreen() {
           loading={checking}
           disabled={checking}
           style={styles.actionButton}
-          buttonColor={Colors.primary}
+          buttonColor={colors.primary}
+          textColor="#000000"
         >
-          Перевірити статус
+          {t.waiting.checkStatus}
         </Button>
 
         {/* Кнопка демонстрації для викладача */}
@@ -116,9 +152,9 @@ export default function WaitingForRoleScreen() {
           icon="shield-check"
           onPress={handleSimulateRoleApproved}
           style={styles.demoButton}
-          textColor={Colors.statusCompleted}
+          textColor="#10B981"
         >
-          [Демо викладачу] Схвалити роль (Майстер)
+          {t.waiting.demoApprove}
         </Button>
 
         <Button
@@ -126,9 +162,9 @@ export default function WaitingForRoleScreen() {
           icon="logout"
           onPress={handleLogout}
           style={styles.logoutButton}
-          textColor={Colors.textSecondary}
+          textColor={colors.textSecondary}
         >
-          Вийти з облікового запису
+          {t.waiting.logout}
         </Button>
       </Surface>
     </ScrollView>
@@ -138,21 +174,18 @@ export default function WaitingForRoleScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: Colors.background,
     justifyContent: 'center',
     padding: 20,
   },
   contentCard: {
     padding: 24,
     borderRadius: 20,
-    backgroundColor: Colors.surface,
     alignItems: 'center',
   },
   iconCircle: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#F3E8FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -166,18 +199,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontWeight: 'bold',
-    color: Colors.text,
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
-    color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 8,
   },
   subDescription: {
-    color: Colors.textSecondary,
     textAlign: 'center',
     fontSize: 13,
     lineHeight: 18,
@@ -185,35 +215,25 @@ const styles = StyleSheet.create({
   },
   boldText: {
     fontWeight: 'bold',
-    color: Colors.primaryDark,
   },
   userInfoBox: {
     width: '100%',
     padding: 12,
     borderRadius: 10,
-    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: Colors.divider,
     marginBottom: 16,
     alignItems: 'center',
   },
   userLabel: {
-    color: Colors.textSecondary,
     fontSize: 11,
   },
   userName: {
     fontWeight: 'bold',
-    color: Colors.text,
     marginTop: 2,
   },
-  userEmail: {
-    color: Colors.textSecondary,
-  },
   statusNotice: {
-    color: Colors.primaryDark,
     textAlign: 'center',
     marginBottom: 12,
-    backgroundColor: '#F3E8FF',
     padding: 8,
     borderRadius: 8,
     width: '100%',
@@ -226,7 +246,7 @@ const styles = StyleSheet.create({
   demoButton: {
     width: '100%',
     borderRadius: 10,
-    borderColor: Colors.statusCompleted,
+    borderColor: '#10B981',
     marginBottom: 10,
   },
   logoutButton: {

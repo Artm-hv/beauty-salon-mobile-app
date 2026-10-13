@@ -8,6 +8,7 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     password: 'artem123',
     firstName: 'Артем',
     lastName: 'Гіжовський',
+    name: 'Артем Гіжовський',
     phone: '+380689317049',
     role: 'MASTER',
   },
@@ -17,6 +18,7 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     password: 'admin123',
     firstName: 'Артем',
     lastName: 'Гіжовський (Адмін)',
+    name: 'Артем Гіжовський (Адміністратор)',
     phone: '+380681112233',
     role: 'ADMIN',
   },
@@ -26,6 +28,7 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     password: 'ihor123',
     firstName: 'Ігор',
     lastName: 'Намачинський',
+    name: 'Ігор Намачинський',
     phone: '+380671234567',
     role: 'MASTER',
   },
@@ -35,6 +38,7 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     password: 'labunskyi123',
     firstName: 'Артем',
     lastName: 'Лабунський',
+    name: 'Артем Лабунський',
     phone: '+380679876543',
     role: 'MASTER',
   },
@@ -44,6 +48,7 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
     password: 'pending123',
     firstName: 'Новий',
     lastName: 'Працівник',
+    name: 'Новий Працівник',
     phone: '+380679998877',
     role: 'PENDING',
   },
@@ -53,7 +58,15 @@ export const DEMO_ACCOUNTS: Record<string, User & { password: string }> = {
 let currentUserSession: User | null = DEMO_ACCOUNTS.master;
 
 export const authService = {
-  getCurrentUser: (): User | null => currentUserSession,
+  getCurrentUser: (): (User & { name: string }) | null => {
+    if (!currentUserSession) return null;
+    return {
+      ...currentUserSession,
+      name:
+        currentUserSession.name ||
+        `${currentUserSession.firstName} ${currentUserSession.lastName}`.trim(),
+    };
+  },
 
   setCurrentUser: (user: User | null) => {
     currentUserSession = user;
@@ -111,6 +124,21 @@ export const authService = {
       phone: userData.phone.trim(),
       role: 'PENDING', // Новий зареєстрований співробітник завжди PENDING
     };
+
+    try {
+      // Відправляємо на сервер для збереження в спільній базі
+      const candidates = ['http://127.0.0.1:8000/api', 'http://127.0.0.1:8081/api'];
+      for (const base of candidates) {
+        try {
+          const res = await fetch(`${base}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newUser),
+          });
+          if (res.ok) break;
+        } catch {}
+      }
+    } catch {}
 
     currentUserSession = newUser;
     return { success: true, user: newUser };
