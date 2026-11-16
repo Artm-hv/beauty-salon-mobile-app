@@ -11,7 +11,7 @@ import { authService } from '../services/authService';
  */
 export default function RegisterScreen() {
   const router = useRouter();
-  const { colors, t, language } = useAppSettings();
+  const { colors, t, language, isDark } = useAppSettings();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -217,7 +217,7 @@ export default function RegisterScreen() {
             style={styles.registerButton}
             contentStyle={styles.buttonContent}
             buttonColor={colors.primary}
-            textColor="#000000"
+            textColor={isDark ? '#000000' : '#FFFFFF'}
           >
             {t.auth.registerButton}
           </Button>

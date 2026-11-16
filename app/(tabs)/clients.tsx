@@ -1,3 +1,5 @@
+import { clientMetrics } from '../../services/clientMetrics';
+import { useAlert } from '../../context/AlertContext';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
@@ -6,7 +8,6 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   RefreshControl,
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,7 +17,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { ClientCard } from '../../components/ClientCard';
 import { ClientItem } from '../../services/mockData';
 import { apiClient } from '../../services/api';
@@ -34,8 +35,9 @@ type SegmentTab = 'ALL' | 'NEW' | 'INACTIVE' | 'NO_RECORD';
  * - Pull-to-Refresh (оновлення свайпом вниз)
  */
 export default function ClientsCRMScreen() {
+  const showAlert = useAlert();
   const router = useRouter();
-  const { colors, t, language } = useAppSettings();
+  const { colors, t, language, isDark } = useAppSettings();
   const [activeTab, setActiveTab] = useState<SegmentTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [clientsList, setClientsList] = useState<ClientItem[]>([]);
@@ -49,11 +51,31 @@ export default function ClientsCRMScreen() {
   const [newCategory, setNewCategory] = useState<'NEW' | 'VIP' | 'ALL' | 'INACTIVE'>('NEW');
   const [submitting, setSubmitting] = useState(false);
 
-  // Завантаження клієнтів з REST API (GET)
+  // Функції відкриття та закриття модального вікна з гарантованим очищенням форми
+  const openAddModal = () => {
+    setNewName('');
+    setNewPhone('');
+    setNewCategory('NEW');
+    setIsAddModalOpen(true);
+  };
+
+  const closeAddModal = () => {
+    setNewName('');
+    setNewPhone('');
+    setNewCategory('NEW');
+    setIsAddModalOpen(false);
+  };
+
+  // Завантаження клієнтів з REST API та динамічний розрахунок показників із бази
   const loadClients = useCallback(async () => {
     try {
-      const data = await apiClient.getClients();
-      setClientsList(data);
+      const [rawClients, bookings, orders] = await Promise.all([
+        apiClient.getClients(),
+        apiClient.getBookings(),
+        apiClient.getOrders(),
+      ]);
+
+      setClientsList(clientMetrics(rawClients, bookings, orders));
     } catch {
       // Помилка обробляється всередині apiClient
     } finally {
@@ -66,6 +88,12 @@ export default function ClientsCRMScreen() {
     loadClients();
   }, [loadClients]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadClients();
+    }, [loadClients])
+  );
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadClients();
@@ -73,8 +101,12 @@ export default function ClientsCRMScreen() {
 
   // Створення нового клієнта через REST API (POST)
   const handleSaveClient = async () => {
+    const isPl = language === 'pl';
     if (!newName.trim()) {
-      Alert.alert('Помилка', "Будь ласка, вкажіть ім'я або прізвище клієнта");
+      showAlert(
+        isPl ? 'Błąd' : 'Помилка',
+        isPl ? 'Proszę podać imię lub nazwisko klienta' : "Будь ласка, вкажіть ім'я або прізвище клієнта"
+      );
       return;
     }
 
@@ -84,17 +116,20 @@ export default function ClientsCRMScreen() {
         name: newName.trim(),
         phone: newPhone.trim() || '+380 67 000 0000',
         category: newCategory,
-        tags: newCategory === 'VIP' ? ['VIP', 'Постійний'] : ['Новий клієнт'],
+        tags: newCategory === 'VIP' ? (isPl ? ['VIP', 'Stały'] : ['VIP', 'Постійний']) : (isPl ? ['Nowy klient'] : ['Новий клієнт']),
       });
 
       setClientsList((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
-      setIsAddModalOpen(false);
-      setNewName('');
-      setNewPhone('');
-      setNewCategory('NEW');
-      Alert.alert('Успіх', `Клієнта "${created.name}" успішно додано до бази!`);
+      closeAddModal();
+      showAlert(
+        isPl ? 'Sukces' : 'Успіх',
+        isPl ? `Klient "${created.name}" został pomyślnie dodany!` : `Клієнта "${created.name}" успішно додано до бази!`
+      );
     } catch {
-      Alert.alert('Помилка', 'Не вдалося зберегти клієнта на сервері');
+      showAlert(
+        isPl ? 'Błąd' : 'Помилка',
+        isPl ? 'Nie udało się zapisać klienta na serwerze' : 'Не вдалося зберегти клієнта на сервері'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +140,7 @@ export default function ClientsCRMScreen() {
     return clientsList.filter((c) => {
       if (activeTab === 'NEW' && c.category !== 'NEW') return false;
       if (activeTab === 'INACTIVE' && c.category !== 'INACTIVE') return false;
-      if (activeTab === 'NO_RECORD' && c.visitCount > 0) return false;
+      if (activeTab === 'NO_RECORD' && c.hasBooking) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -118,24 +153,6 @@ export default function ClientsCRMScreen() {
     });
   }, [clientsList, activeTab, searchQuery]);
 
-  const handleCardPress = (client: ClientItem) => {
-    Alert.alert(
-      client.name,
-      `Код: ${client.cnCode}\nТелефон: ${client.phone}\nКатегорія: ${client.category}\nВізитів: ${client.visitCount}\nОплачено: ${client.totalSpent} ₴`,
-      [
-        {
-          text: 'Новий запис',
-          onPress: () =>
-            router.push({
-              pathname: '/(tabs)/new-booking',
-              params: { clientId: client.id },
-            }),
-        },
-        { text: 'OK', style: 'cancel' },
-      ]
-    );
-  };
-
   const handleQuickAdd = (client: ClientItem) => {
     router.push({
       pathname: '/(tabs)/new-booking',
@@ -144,41 +161,63 @@ export default function ClientsCRMScreen() {
   };
 
   const handleImportDatabase = async () => {
+    const isPl = language === 'pl';
     try {
       const updated = await apiClient.importClientsDatabase();
-      setClientsList(updated);
-      Alert.alert(
-        'Імпорт бази',
-        `✓ Базу клієнтів успішно імпортовано! Завантажено ${updated.length} клієнтів салону.`
+      await loadClients();
+      showAlert(
+        isPl ? 'Import bazy' : 'Імпорт бази',
+        isPl
+          ? `✓ Baza klientów została pomyślnie zaimportowana! Załadowano ${updated.length} klientów.`
+          : `✓ Базу клієнтів успішно імпортовано! Завантажено ${updated.length} клієнтів салону.`
       );
     } catch {
-      Alert.alert('Помилка', 'Не вдалося імпортувати базу клієнтів');
+      showAlert(
+        isPl ? 'Błąd' : 'Помилка',
+        isPl ? 'Nie udało się zaimportować bazy klientów' : 'Не вдалося імпортувати базу клієнтів'
+      );
     }
   };
 
   const handleMenuPress = () => {
-    Alert.alert('Управління базою', 'Оберіть потрібну дію:', [
-      { text: 'Оновити дані з сервера', onPress: loadClients },
-      { text: '📥 Імпорт бази', onPress: handleImportDatabase },
-      {
-        text: 'Очистити базу (Скинути)',
-        style: 'destructive',
-        onPress: () => {
-          Alert.alert('Підтвердження', 'Очистити всю тестову базу?', [
-            {
-              text: 'Так, очистити',
-              style: 'destructive',
-              onPress: async () => {
-                await apiClient.clearAllData();
-                loadClients();
-              },
-            },
-            { text: 'Скасувати', style: 'cancel' },
-          ]);
+    const isPl = language === 'pl';
+    showAlert(
+      isPl ? 'Zarządzanie bazą' : 'Управління базою',
+      isPl ? 'Wybierz działanie:' : 'Оберіть потрібну дію:',
+      [
+        { text: isPl ? 'Odśwież dane z serwera' : 'Оновити дані з сервера', onPress: loadClients },
+        { text: isPl ? '📥 Import bazy' : '📥 Імпорт бази', onPress: handleImportDatabase },
+        {
+          text: isPl ? 'Wyczyść bazę (Reset)' : 'Очистити базу (Скинути)',
+          style: 'destructive',
+          onPress: () => {
+            showAlert(
+              isPl ? 'Potwierdzenie' : 'Підтвердження',
+              isPl ? 'Wyczyścić całą bazę testową?' : 'Очистити всю тестову базу?',
+              [
+                {
+                  text: isPl ? 'Tak, wyczyść' : 'Так, очистити',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await apiClient.clearAllData();
+                      await loadClients();
+                    } catch {
+                      showAlert(
+                        isPl ? 'Błąd' : 'Помилка',
+                        isPl ? 'Nie udało się wyczyścić bazy' : 'Не вдалося очистити базу'
+                      );
+                    }
+                  },
+                },
+                { text: isPl ? 'Anuluj' : 'Скасувати', style: 'cancel' },
+              ]
+            );
+          },
         },
-      },
-      { text: 'Закрити', style: 'cancel' },
-    ]);
+        { text: isPl ? 'Zamknij' : 'Закрити', style: 'cancel' },
+      ]
+    );
   };
 
   return (
@@ -203,7 +242,14 @@ export default function ClientsCRMScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'ALL' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'ALL' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('ALL')}
           activeOpacity={0.8}
@@ -222,7 +268,14 @@ export default function ClientsCRMScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'NEW' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'NEW' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('NEW')}
           activeOpacity={0.8}
@@ -241,7 +294,14 @@ export default function ClientsCRMScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'INACTIVE' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'INACTIVE' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('INACTIVE')}
           activeOpacity={0.8}
@@ -260,7 +320,14 @@ export default function ClientsCRMScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'NO_RECORD' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'NO_RECORD' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('NO_RECORD')}
           activeOpacity={0.8}
@@ -323,7 +390,9 @@ export default function ClientsCRMScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4CAF50" />
-            <Text style={styles.loadingText}>Завантаження бази клієнтів...</Text>
+            <Text style={styles.loadingText}>
+              {language === 'pl' ? 'Ładowanie bazy klientów...' : 'Завантаження бази клієнтів...'}
+            </Text>
           </View>
         ) : filteredClients.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -338,12 +407,24 @@ export default function ClientsCRMScreen() {
             </Text>
             {!searchQuery.trim() && (
               <TouchableOpacity
-                style={styles.emptyAddButton}
+                style={[
+                  styles.emptyAddButton,
+                  { backgroundColor: isDark ? '#FFFFFF' : '#000000' },
+                ]}
                 activeOpacity={0.85}
-                onPress={() => setIsAddModalOpen(true)}
+                onPress={openAddModal}
               >
-                <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-                <Text style={styles.emptyAddButtonText}>
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={18}
+                  color={isDark ? '#000000' : '#FFFFFF'}
+                />
+                <Text
+                  style={[
+                    styles.emptyAddButtonText,
+                    { color: isDark ? '#000000' : '#FFFFFF' },
+                  ]}
+                >
                   {language === 'pl' ? 'Dodaj pierwszego klienta' : 'Додати першого клієнта'}
                 </Text>
               </TouchableOpacity>
@@ -354,7 +435,6 @@ export default function ClientsCRMScreen() {
             <ClientCard
               key={client.id}
               client={client}
-              onPress={() => handleCardPress(client)}
             />
           ))
         )}
@@ -364,7 +444,7 @@ export default function ClientsCRMScreen() {
       <TouchableOpacity
         style={styles.fabButton}
         activeOpacity={0.85}
-        onPress={() => setIsAddModalOpen(true)}
+        onPress={openAddModal}
       >
         <MaterialCommunityIcons name="account-plus" size={20} color="#FFFFFF" />
         <Text style={styles.fabText}>
@@ -379,7 +459,7 @@ export default function ClientsCRMScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
           style={styles.modalOverlay}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <TouchableWithoutFeedback onPress={closeAddModal}>
             <View style={styles.modalBackdropDismiss} />
           </TouchableWithoutFeedback>
 
@@ -388,7 +468,7 @@ export default function ClientsCRMScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]}>
                 {language === 'pl' ? 'Nowy klient' : 'Новий клієнт'}
               </Text>
-              <TouchableOpacity onPress={() => setIsAddModalOpen(false)}>
+              <TouchableOpacity onPress={closeAddModal}>
                 <MaterialCommunityIcons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
@@ -552,7 +632,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   segmentTextActive: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   searchRow: {
@@ -754,7 +833,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalSubmitBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },

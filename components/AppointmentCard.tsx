@@ -75,6 +75,11 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
               <MaterialCommunityIcons name="check" size={11} color={backgroundColor} />
             </View>
           )}
+          {appointment.photoUri && (
+            <View style={[styles.iconCircle, { backgroundColor: '#7B2CBF' }]}>
+              <MaterialCommunityIcons name="camera" size={10} color="#FFFFFF" />
+            </View>
+          )}
         </View>
       </View>
 

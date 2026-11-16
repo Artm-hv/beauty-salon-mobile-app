@@ -1,3 +1,4 @@
+import { useAlert } from '../../context/AlertContext';
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -6,26 +7,23 @@ import {
   TouchableOpacity,
   Dimensions,
   Image,
-  PanResponder,
   Modal,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Text,
   Surface,
   Portal,
   Dialog,
   Button,
-  Snackbar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { AppointmentCard } from '../../components/AppointmentCard';
 import {
-  MOCK_APPOINTMENTS,
-  MOCK_MASTERS,
   AppointmentItem,
   Master,
 } from '../../services/mockData';
@@ -83,6 +81,7 @@ const generateDaysList = (centerDate: string) => {
  * Підключено завантаження та оновлення через REST API (GET, PUT /api/bookings)
  */
 export default function CalendarScreen() {
+  const showAlert = useAlert();
   const router = useRouter();
   const { colors, isDark, language } = useAppSettings();
   const currentUser = authService.getCurrentUser();
@@ -103,26 +102,19 @@ export default function CalendarScreen() {
   const [pickerMonth, setPickerMonth] = useState(() => new Date().getMonth());
 
   // Синхронізація горизонтального скролу між панеллю майстрів та колонками сітки
-  const headerScrollRef = useRef<ScrollView>(null);
-  const gridScrollRef = useRef<ScrollView>(null);
+  const headerScrollRef = useRef<any>(null);
+  const gridScrollRef = useRef<any>(null);
   const isScrollingGrid = useRef(false);
   const isScrollingHeader = useRef(false);
 
   // Стан даних з REST API
   const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
-  const [mastersList, setMastersList] = useState<Master[]>(MOCK_MASTERS);
+  const [mastersList, setMastersList] = useState<Master[]>([]);
 
   // Визначення конкретного майстра для поточної сесії
   const myMaster = useMemo(() => {
     if (!currentUser) return null;
-    return (
-      mastersList.find(
-        (m) =>
-          m.id === currentUser.id ||
-          m.name.toLowerCase().includes(currentUser.lastName.toLowerCase()) ||
-          m.name.toLowerCase().includes(currentUser.firstName.toLowerCase())
-      ) || null
-    );
+    return mastersList.find(m => m.userId === currentUser.id) || null;
   }, [currentUser, mastersList]);
 
   // Режим відображення: для майстра за замовчуванням 'MY' (персональний розклад), для адміна 'ALL' (вся студія)
@@ -228,8 +220,57 @@ export default function CalendarScreen() {
   // Діалог деталей візиту
   const [activeAppointment, setActiveAppointment] = useState<AppointmentItem | null>(null);
 
-  // Сповіщення про жест/акселерометр
-  const [gestureFeedback, setGestureFeedback] = useState<string | null>(null);
+  // Стан фотофіксації та перегляду фото результату роботи
+  const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+
+  // Фотофіксація виконаної послуги майстром (Камера)
+  const handleTakePhoto = async () => {
+    if (!activeAppointment) return;
+    try {
+      setIsCapturingPhoto(true);
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permissionResult.granted) {
+        showAlert(
+          language === 'pl' ? 'Aparat' : 'Камера',
+          language === 'pl'
+            ? 'Wymagane jest zezwolenie na aparat do wykonania zdjęcia efektu pracy.'
+            : 'Потрібен дозвіл на використання камери для фотофіксації результату роботи.'
+        );
+        setIsCapturingPhoto(false);
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.65,
+        base64: true,
+      });
+
+      setIsCapturingPhoto(false);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        if (!result.assets[0].base64) throw new Error('Фото недоступне');
+        const photoUri = 'data:image/jpeg;base64,' + result.assets[0].base64;
+        await apiClient.updateAppointment(activeAppointment.id, { photoUri });
+
+        // Оновлюємо активний запис у відкритому діалозі
+        setActiveAppointment(prev => prev?.id === activeAppointment.id ? { ...prev, photoUri } : prev);
+
+        // Оновлюємо запис у загальному списку календаря
+        setAppointmentsList((prev: AppointmentItem[]) =>
+          prev.map((a) => (a.id === activeAppointment.id ? { ...a, photoUri } : a))
+        );
+      }
+    } catch {
+      setIsCapturingPhoto(false);
+      showAlert(
+        language === 'pl' ? 'Błąd' : 'Помилка',
+        language === 'pl' ? 'Nie udało się zrobić zdjęcia.' : 'Не вдалося зробити фото.'
+      );
+    }
+  };
 
   // Поточний час для динамічної червоної лінії
   const [currentMinutesFromStart, setCurrentMinutesFromStart] = useState<number>(() => {
@@ -255,53 +296,28 @@ export default function CalendarScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Функції перемикання дати (тепер без обмежень)
-  const goToNextDay = (source: string = 'Жест') => {
+  // Функції перемикання дати
+  const goToNextDay = () => {
     setSelectedDate((prev) => {
       const d = new Date(prev + 'T12:00:00');
       d.setDate(d.getDate() + 1);
-      const next = toIsoDate(d);
-      const nextDate = new Date(next + 'T12:00:00');
-      setGestureFeedback(`📅 ${dayNamesShort[nextDate.getDay()]}, ${nextDate.getDate()} ${monthNamesFull[nextDate.getMonth()]} (${source})`);
-      return next;
+      return toIsoDate(d);
     });
   };
 
-  const goToPrevDay = (source: string = 'Жест') => {
+  const goToPrevDay = () => {
     setSelectedDate((prev) => {
       const d = new Date(prev + 'T12:00:00');
       d.setDate(d.getDate() - 1);
-      const next = toIsoDate(d);
-      const nextDate = new Date(next + 'T12:00:00');
-      setGestureFeedback(`📅 ${dayNamesShort[nextDate.getDay()]}, ${nextDate.getDate()} ${monthNamesFull[nextDate.getMonth()]} (${source})`);
-      return next;
+      return toIsoDate(d);
     });
   };
 
-  // Сенсор 2: Акселерометр - плавний нахил/рух телефону вліво-вправо
+  // Сенсор: Акселерометр - плавний нахил/рух телефону вліво-вправо (перемикання дня без попапу)
   useAccelerometer({
-    onShakeRight: () => goToNextDay('Акселерометр →'),
-    onShakeLeft: () => goToPrevDay('← Акселерометр'),
+    onShakeRight: () => goToNextDay(),
+    onShakeLeft: () => goToPrevDay(),
   });
-
-  // Свайп-жести по екрану (PanResponder)
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          // Реагуємо на горизонтальний свайп сильніший за вертикальний
-          return Math.abs(gestureState.dx) > 35 && Math.abs(gestureState.dy) < 30;
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx > 45) {
-            goToPrevDay('Свайп праворуч');
-          } else if (gestureState.dx < -45) {
-            goToNextDay('Свайп ліворуч');
-          }
-        },
-      }),
-    []
-  );
 
   // Переведення часу HH:mm у пікселі для точного розміщення картки
   const calculateCardPosition = (startTime: string, endTime: string) => {
@@ -330,20 +346,21 @@ export default function CalendarScreen() {
 
   // Фільтрація записів за вибраною датою (прив'язка сітки до дати)
   const filteredAppointments = useMemo(() => {
-    return appointmentsList.filter((a) => a.date === selectedDate);
+    return appointmentsList.filter((a) => a.date === selectedDate && a.status !== 'CANCELLED');
   }, [appointmentsList, selectedDate]);
 
   // Фільтрація майстрів для відображення:
   // Для Майстра — показуємо ВИКЛЮЧНО його персональний календар без доступу до розкладу колег!
   const displayedMasters = useMemo(() => {
     if (isMasterRole) {
-      return myMaster ? [myMaster] : (mastersList.length > 0 ? [mastersList[0]] : []);
+      return myMaster ? [myMaster] : [];
     }
+    const visible = mastersList.filter(m => m.active || filteredAppointments.some(b => b.masterId === m.id));
     if (selectedMasterId) {
-      return mastersList.filter((m) => m.id === selectedMasterId);
+      return visible.filter((m) => m.id === selectedMasterId);
     }
-    return mastersList;
-  }, [mastersList, selectedMasterId, isMasterRole, myMaster]);
+    return visible;
+  }, [mastersList, selectedMasterId, isMasterRole, myMaster, filteredAppointments]);
 
   const isSingleMasterView = displayedMasters.length === 1;
   const screenWidth = Dimensions.get('window').width;
@@ -359,12 +376,11 @@ export default function CalendarScreen() {
           styles.headerRow,
           { backgroundColor: colors.surface, borderBottomColor: colors.divider },
         ]}
-        {...panResponder.panHandlers}
       >
         <View style={styles.dateNavGroup}>
           <TouchableOpacity
             style={styles.dateNavArrow}
-            onPress={() => goToPrevDay('Стрілка')}
+            onPress={() => goToPrevDay()}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
@@ -387,7 +403,7 @@ export default function CalendarScreen() {
 
           <TouchableOpacity
             style={styles.dateNavArrow}
-            onPress={() => goToNextDay('Стрілка')}
+            onPress={() => goToNextDay()}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
@@ -404,11 +420,6 @@ export default function CalendarScreen() {
             style={[styles.refreshButton, { backgroundColor: colors.surfaceLight }]}
             onPress={() => {
               fetchCalendarData();
-              setGestureFeedback(
-                language === 'pl'
-                  ? '🔄 Zsynchronizowano grafik z serwerem'
-                  : '🔄 Розклад синхронізовано з сервером'
-              );
             }}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={colors.text} />
@@ -423,22 +434,6 @@ export default function CalendarScreen() {
           { backgroundColor: colors.surface, borderBottomColor: colors.divider },
         ]}
       >
-        {/* Кнопка "Усі майстри / Група" (тільки для адміністратора) */}
-        {!isMasterRole && (
-          <TouchableOpacity
-            style={styles.groupIconContainer}
-            onPress={() => {
-              setSelectedMasterId(null);
-              headerScrollRef.current?.scrollTo({ x: 0, animated: true });
-              gridScrollRef.current?.scrollTo({ x: 0, animated: true });
-            }}
-          >
-            <View style={[styles.groupCircle, { backgroundColor: colors.surfaceLight }]}>
-              <MaterialCommunityIcons name="account-group" size={16} color={colors.text} />
-            </View>
-          </TouchableOpacity>
-        )}
-
         <ScrollView
           ref={headerScrollRef}
           horizontal
@@ -447,6 +442,22 @@ export default function CalendarScreen() {
           scrollEventThrottle={16}
           contentContainerStyle={styles.mastersScroll}
         >
+          {/* Кнопка "Усі майстри / Група" (тільки для адміністратора) */}
+          {isMasterRole ? <View style={styles.groupIconContainer} /> : (
+            <TouchableOpacity
+              style={styles.groupIconContainer}
+              onPress={() => {
+                setSelectedMasterId(null);
+                headerScrollRef.current?.scrollTo({ x: 0, animated: true });
+                gridScrollRef.current?.scrollTo({ x: 0, animated: true });
+              }}
+            >
+              <View style={[styles.groupCircle, { backgroundColor: colors.surfaceLight }]}>
+                <MaterialCommunityIcons name="account-group" size={16} color={colors.text} />
+              </View>
+            </TouchableOpacity>
+          )}
+
           {displayedMasters.map((master, index) => {
             const isSelected = selectedMasterId === master.id;
             const apptCount = filteredAppointments.filter((a) => a.masterId === master.id).length;
@@ -456,7 +467,13 @@ export default function CalendarScreen() {
                 disabled={isMasterRole}
                 style={[
                   styles.masterHeaderItem,
-                  { width: activeColumnWidth },
+                  {
+                    width: activeColumnWidth,
+                    backgroundColor: isSelected
+                      ? (isDark ? '#222226' : '#FFFFFF')
+                      : colors.surfaceLight,
+                    borderColor: isSelected ? colors.primaryDark : colors.cardBorder,
+                  },
                   isSelected && styles.masterHeaderItemActive,
                 ]}
                 onPress={() => {
@@ -469,12 +486,12 @@ export default function CalendarScreen() {
               >
                 <View style={styles.masterTextInfo}>
                   <Text numberOfLines={1} style={[styles.masterNameText, { color: colors.text }]}>
-                    {master.name}
+                    {master.name}{master.active ? '' : (language === 'pl' ? ' (nieaktywny)' : ' (неактивний)')}
                   </Text>
                 </View>
                 {apptCount > 0 && (
-                  <View style={styles.countBadge}>
-                    <Text style={styles.countBadgeText}>{apptCount}</Text>
+                  <View style={[styles.countBadge, { backgroundColor: isDark ? '#2C2C2E' : '#E5E7EB' }]}>
+                    <Text style={[styles.countBadgeText, { color: colors.text }]}>{apptCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -536,7 +553,7 @@ export default function CalendarScreen() {
 
                 {/* Порожній слот розкладу — для адміна створення запису, для майстра тільки інформаційний */}
                 {appointments.length === 0 && (
-                  !isMasterRole ? (
+                  !isMasterRole && master.active ? (
                     <TouchableOpacity
                       style={[
                         styles.emptySlotHatched,
@@ -549,7 +566,7 @@ export default function CalendarScreen() {
                       onPress={() => {
                         router.push({
                           pathname: '/(tabs)/new-booking',
-                          params: { masterId: master.id },
+                          params: { masterId: master.id, date: selectedDate },
                         });
                       }}
                     >
@@ -594,16 +611,18 @@ export default function CalendarScreen() {
             );
           })}
 
-          {/* Червона динамічна лінія поточного часу */}
-          <View
-            style={[
-              styles.currentTimeIndicator,
-              { top: (currentMinutesFromStart / 60) * HOUR_HEIGHT },
-            ]}
-          >
-            <View style={styles.redDot} />
-            <View style={styles.redLine} />
-          </View>
+          {/* Червона динамічна лінія поточного часу (лише для сьогоднішнього дня) */}
+          {selectedDate === toIsoDate(new Date()) && (
+            <View
+              style={[
+                styles.currentTimeIndicator,
+                { top: (currentMinutesFromStart / 60) * HOUR_HEIGHT },
+              ]}
+            >
+              <View style={styles.redDot} />
+              <View style={styles.redLine} />
+            </View>
+          )}
         </ScrollView>
       </ScrollView>
 
@@ -613,7 +632,6 @@ export default function CalendarScreen() {
           styles.bottomDateDock,
           { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
         ]}
-        {...panResponder.panHandlers}
       >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bottomDateScroll}>
           {daysList.map((item) => {
@@ -623,7 +641,14 @@ export default function CalendarScreen() {
                 key={item.fullDate}
                 style={[
                   styles.datePill,
-                  isActive && [styles.datePillActive, { backgroundColor: colors.surfaceLight }],
+                  isActive && [
+                    styles.datePillActive,
+                    {
+                      backgroundColor: isDark ? colors.surfaceLight : '#E5E7EB',
+                      borderWidth: isDark ? 0 : 1,
+                      borderColor: colors.cardBorder,
+                    },
+                  ],
                 ]}
                 onPress={() => setSelectedDate(item.fullDate)}
               >
@@ -709,29 +734,98 @@ export default function CalendarScreen() {
             )}
           </Dialog.Content>
           <Dialog.Actions>
-            <Button
-              textColor="#4CAF50"
-              onPress={async () => {
-                if (activeAppointment) {
-                  await apiClient.completeAppointment(activeAppointment.id, { status: 'COMPLETED' });
-                  setGestureFeedback(
-                    language === 'pl'
-                      ? '✓ Status zaktualizowano przez PUT: Zakończono wizytę'
-                      : '✓ Статус оновлено через PUT: Візит завершено'
-                  );
-                  setActiveAppointment(null);
-                  fetchCalendarData();
-                }
-              }}
-            >
-              {language === 'pl' ? 'Zakończ wizytę (PUT)' : 'Завершити візит (PUT)'}
-            </Button>
+            {activeAppointment?.photoUri ? (
+              <Button
+                textColor="#7B2CBF"
+                icon="eye"
+                onPress={() => setIsPhotoViewerOpen(true)}
+              >
+                {language === 'pl' ? '👁️ Zobacz zdjęcie' : '👁️ Переглянути фото'}
+              </Button>
+            ) : (
+              <Button
+                textColor="#7B2CBF"
+                icon="camera"
+                loading={isCapturingPhoto}
+                disabled={isCapturingPhoto}
+                onPress={handleTakePhoto}
+              >
+                {language === 'pl' ? '📷 Zrób zdjęcie' : '📷 Сфотографувати'}
+              </Button>
+            )}
+            {activeAppointment && activeAppointment.status !== 'COMPLETED' && (
+              <Button
+                textColor="#10B981"
+                icon="check-circle-outline"
+                onPress={async () => {
+                  try {
+                    await apiClient.updateAppointment(activeAppointment.id, { status: 'COMPLETED' });
+                    setActiveAppointment(prev => prev ? { ...prev, status: 'COMPLETED' } : null);
+                    await fetchCalendarData();
+                  } catch (e) {
+                    showAlert(language === 'pl' ? 'Błąd' : 'Помилка', e instanceof Error ? e.message : String(e));
+                  }
+                }}
+              >
+                {language === 'pl' ? 'Zakończ' : 'Завершити'}
+              </Button>
+            )}
             <Button textColor={colors.textSecondary} onPress={() => setActiveAppointment(null)}>
               {language === 'pl' ? 'Zamknij' : 'Закрити'}
             </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Модальне вікно перегляду фотографії виконаної роботи */}
+      <Modal
+        visible={isPhotoViewerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsPhotoViewerOpen(false)}
+      >
+        <View style={styles.photoModalOverlay}>
+          <View
+            style={[
+              styles.photoModalCard,
+              { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            ]}
+          >
+            <View style={styles.photoModalHeader}>
+              <Text style={[styles.photoModalTitle, { color: colors.text }]}>
+                {language === 'pl' ? 'Zdjęcie wykonanej usługi' : 'Фото виконаної роботи'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsPhotoViewerOpen(false)}
+                style={[styles.photoCloseIconBtn, { backgroundColor: colors.surfaceLight }]}
+              >
+                <MaterialCommunityIcons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {activeAppointment?.photoUri ? (
+              <View style={styles.photoContainer}>
+                <Image
+                  source={{ uri: activeAppointment.photoUri }}
+                  style={styles.photoImage}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
+            <View style={styles.photoModalFooter}>
+              <TouchableOpacity
+                style={[styles.photoCloseBtn, { backgroundColor: colors.primary }]}
+                onPress={() => setIsPhotoViewerOpen(false)}
+              >
+                <Text style={[styles.photoCloseBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+                  {language === 'pl' ? 'Zamknij' : 'Закрити'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Модальне вікно вибору дати та місяця */}
       <Modal visible={isDatePickerOpen} transparent animationType="fade">
@@ -808,10 +902,6 @@ export default function CalendarScreen() {
                     onPress={() => {
                       setSelectedDate(cell.dateStr);
                       setIsDatePickerOpen(false);
-                      const dObj = new Date(cell.dateStr + 'T12:00:00');
-                      setGestureFeedback(
-                        `📅 ${cell.day} ${monthNamesFull[dObj.getMonth()]} ${dObj.getFullYear()}`
-                      );
                     }}
                   >
                     <Text
@@ -838,7 +928,6 @@ export default function CalendarScreen() {
                   const todayStr = toIsoDate(new Date());
                   setSelectedDate(todayStr);
                   setIsDatePickerOpen(false);
-                  setGestureFeedback(language === 'pl' ? '📅 Dzisiaj' : '📅 Сьогодні');
                 }}
               >
                 <Text style={[styles.quickDateBtnText, { color: colors.text }]}>
@@ -850,7 +939,7 @@ export default function CalendarScreen() {
                 style={[styles.datePickerCloseBtn, { backgroundColor: colors.primary }]}
                 onPress={() => setIsDatePickerOpen(false)}
               >
-                <Text style={[styles.datePickerCloseBtnText, { color: '#000000' }]}>
+                <Text style={[styles.datePickerCloseBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
                   {language === 'pl' ? 'Zamknij' : 'Закрити'}
                 </Text>
               </TouchableOpacity>
@@ -859,15 +948,6 @@ export default function CalendarScreen() {
         </View>
       </Modal>
 
-      {/* Сповіщення зворотного зв'язку жестів / акселерометра */}
-      <Snackbar
-        visible={!!gestureFeedback}
-        onDismiss={() => setGestureFeedback(null)}
-        duration={1500}
-        style={styles.gestureSnackbar}
-      >
-        <Text style={styles.gestureSnackbarText}>{gestureFeedback}</Text>
-      </Snackbar>
     </View>
   );
 }
@@ -944,8 +1024,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
   },
   groupIconContainer: {
-    paddingLeft: 12,
-    paddingRight: 8,
+    width: TIME_COLUMN_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   groupCircle: {
     width: 34,
@@ -956,23 +1037,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mastersScroll: {
-    paddingRight: 16,
-    gap: 10,
+    alignItems: 'center',
   },
   masterHeaderItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161618',
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#242426',
     width: 145,
   },
   masterHeaderItemActive: {
-    borderColor: '#C68A2C',
-    backgroundColor: '#222226',
+    borderWidth: 1.5,
   },
   masterTextInfo: {
     flex: 1,
@@ -1013,16 +1090,14 @@ const styles = StyleSheet.create({
   hourCell: {
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
-    paddingLeft: 10,
+    paddingLeft: 8,
     paddingTop: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1A1A1A',
+    borderBottomWidth: 0,
   },
   hourText: {
-    color: '#8E8E93',
     fontSize: 12,
-    fontWeight: '500',
-    marginTop: -8, // Щоб текст 10:00 стояв рівно на лінії
+    fontWeight: '600',
+    marginTop: -7,
   },
   masterColumn: {
     width: DEFAULT_COLUMN_WIDTH,
@@ -1109,8 +1184,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   datePillMonthActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   datePillDay: {
     fontSize: 12,
@@ -1118,7 +1192,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   datePillDayActive: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   activeDotIndicator: {
@@ -1291,5 +1364,63 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 13,
     fontWeight: '700',
+  },
+  // Стилі модального вікна перегляду фотографії
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  photoModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  photoModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  photoModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  photoCloseIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoContainer: {
+    width: '100%',
+    height: 380,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  photoModalFooter: {
+    padding: 14,
+    alignItems: 'flex-end',
+  },
+  photoCloseBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  photoCloseBtnText: {
+    color: '#000000',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

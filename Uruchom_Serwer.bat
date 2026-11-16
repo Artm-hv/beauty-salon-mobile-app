@@ -30,58 +30,49 @@ if exist "backend\server.py" (
     start "Svoya REST API" /min python backend\server.py
 )
 
-:: 4. Sprawdzanie autoryzacji w Expo CLI
-set EXPO_USER=
-for /f "tokens=*" %%i in ('npx expo whoami 2^>nul') do set EXPO_USER=%%i
-
-if "%EXPO_USER%"=="" set EXPO_USER=Not logged in
-if "%EXPO_USER%"=="Not logged in" goto no_auth
-
-echo [OK] Zalogowano w Expo jako: %EXPO_USER%
 echo.
-echo   [1] Uruchom przez TUNEL (Tunnel) - polaczenie z dowolnej sieci / telefonu
-echo   [2] Uruchom przez lokalne Wi-Fi (LAN) - wspolna siec Wi-Fi
-echo   [3] Uruchom w PRZEGLADARCE (Web) - bez telefonu
+echo ================================================================
+echo   [1] Uruchom LAN / Hotspot z komputera [DOMYSLNIE - nacisnij ENTER]
+echo   [2] Uruchom TUNEL (Zalecane na eduroam / uczelni - dziala ZAWSZE)
+echo   [3] Uruchom w PRZEGLADARCE (Web) - bez telefonu na komputerze
+echo ================================================================
 echo.
-set /p choice="Wybierz tryb [domyslnie 1]: "
-if "%choice%"=="2" goto run_lan
+set "choice=1"
+set /p choice="Wybierz opcje [ENTER = 1]: "
+if "%choice%"=="2" goto run_tunnel
 if "%choice%"=="3" goto run_web
-goto run_tunnel
-
-:no_auth
-echo [!] Brak aktywnego logowania do konta Expo na tym komputerze.
-echo.
-echo   [1] Zaloguj sie do swojego konta Expo (zalecane dla trybu Tunnel)
-echo   [2] Uruchom przez lokalne Wi-Fi (LAN) - BEZ KONTA (telefon i PC w jednym Wi-Fi)
-echo   [3] Uruchom w przegladarce (Web) - BEZ KONTA
-echo.
-set /p no_auth_choice="Wybierz opcje [1, 2 lub 3]: "
-if "%no_auth_choice%"=="2" goto run_lan
-if "%no_auth_choice%"=="3" goto run_web
-
-echo.
-echo Podaj login (email) i haslo do swojego konta expo.dev:
-call npx expo login
-goto run_tunnel
-
-:run_tunnel
-cls
-echo ================================================================
-echo [INFO] Uruchamianie serwera Expo przez tunel...
-echo [WSKAZOWKA] Ponizej pojawi sie kod QR oraz biezace logi z telefonu!
-echo ================================================================
-echo.
-npx expo start --tunnel
-pause
-exit /b
+goto run_lan
 
 :run_lan
 cls
 echo ================================================================
 echo [INFO] Uruchamianie serwera Expo przez lokalna siec Wi-Fi (LAN)...
+echo [WSKAZOWKA] Zeskanuj kod QR w aplikacji Expo Go na telefonie!
+echo [UWAGA] Jesli jestes na eduroam, wlacz Hotspot w Windows lub uzyj opcji [2] Tunel!
 echo ================================================================
 echo.
-npx expo start --lan
+call npx expo start --lan -c
+if %errorlevel% neq 0 (
+    echo.
+    echo [X] Wystapil blad podczas uruchamiania Expo.
+    pause
+)
+pause
+exit /b
+
+:run_tunnel
+cls
+echo ================================================================
+echo [INFO] Uruchamianie serwera Expo w trybie TUNEL...
+echo [WSKAZOWKA] Omija blokady eduroam i uczelniane zapory sieciowe!
+echo ================================================================
+echo.
+call npx expo start --tunnel -c
+if %errorlevel% neq 0 (
+    echo.
+    echo [X] Wystapil blad podczas uruchamiania trybu Tunel.
+    pause
+)
 pause
 exit /b
 
@@ -91,6 +82,11 @@ echo ================================================================
 echo [INFO] Uruchamianie aplikacji w przegladarce internetowej...
 echo ================================================================
 echo.
-npm run web
+call npm run web
+if %errorlevel% neq 0 (
+    echo.
+    echo [X] Wystapil blad podczas uruchamiania wersji Web.
+    pause
+)
 pause
 exit /b

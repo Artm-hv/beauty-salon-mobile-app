@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Surface, Button, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
-import { authService } from '../services/authService';
-import { apiClient } from '../services/api';
+import { authService, useCurrentUser } from '../services/authService';
 
 /**
  * Екран 2: Очікування підтвердження ролі (WaitingForRoleScreen)
@@ -13,60 +12,44 @@ import { apiClient } from '../services/api';
  */
 export default function WaitingForRoleScreen() {
   const router = useRouter();
-  const { colors, t } = useAppSettings();
-  const currentUser = authService.getCurrentUser();
+  const { colors, t, isDark } = useAppSettings();
+  const currentUser = useCurrentUser();
 
   const [checking, setChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const hasNavigated = useRef(false);
+
+  useEffect(() => {
+    if (currentUser?.role && currentUser.role !== 'PENDING' && !hasNavigated.current) {
+      hasNavigated.current = true;
+      router.replace('/(tabs)/calendar');
+    }
+  }, [currentUser?.role]);
 
   // Реальна перевірка статусу ролі (polling через API)
   const handleCheckStatus = async () => {
+    if (checking || hasNavigated.current) return;
     setChecking(true);
     setStatusMessage('');
 
     try {
-      const allUsers = await apiClient.getUsers();
-      const current = currentUser || authService.getCurrentUser();
-      const me = allUsers.find(
-        (u) =>
-          u.id === current?.id ||
-          (current?.email && u.email.toLowerCase() === current.email.toLowerCase())
-      );
-
-      if (me) {
-        authService.setCurrentUser(me);
-        if (me.role !== 'PENDING') {
-          setChecking(false);
-          router.replace('/(tabs)/calendar');
-          return;
-        }
+      const me = await authService.refresh();
+      if (me.role !== 'PENDING' && !hasNavigated.current) {
+        hasNavigated.current = true;
+        router.replace('/(tabs)/calendar');
+        return;
       }
-    } catch {}
-
-    setChecking(false);
-    setStatusMessage(t.waiting.pendingNotice);
-  };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      handleCheckStatus();
-    }, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Демо-функція для захисту перед викладачем: імітація надання ролі адміністратором
-  const handleSimulateRoleApproved = () => {
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
-        role: 'MASTER' as const,
-      };
-      authService.setCurrentUser(updatedUser);
-      router.replace('/(tabs)/calendar');
+      setStatusMessage(t.waiting.pendingNotice);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChecking(false);
     }
   };
 
   const handleLogout = () => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
     authService.logout();
     router.replace('/');
   };
@@ -141,26 +124,12 @@ export default function WaitingForRoleScreen() {
           disabled={checking}
           style={styles.actionButton}
           buttonColor={colors.primary}
-          textColor="#000000"
+          textColor={isDark ? '#000000' : '#FFFFFF'}
         >
           {t.waiting.checkStatus}
         </Button>
 
-        {/* Кнопка демонстрації для викладача */}
-        <Button
-          mode="outlined"
-          icon="shield-check"
-          onPress={handleSimulateRoleApproved}
-          style={styles.demoButton}
-          textColor="#10B981"
-        >
-          {t.waiting.demoApprove}
-        </Button>
-
-        <Button
-          mode="text"
-          icon="logout"
-          onPress={handleLogout}
+        <Button onPress={handleLogout}
           style={styles.logoutButton}
           textColor={colors.textSecondary}
         >

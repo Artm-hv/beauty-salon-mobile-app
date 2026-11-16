@@ -55,8 +55,8 @@ export default function StatisticsScreen() {
   }, [isAdmin]);
 
   // Динамічний вибір року та місяця
-  const [selectedYear, setSelectedYear] = useState(2026);
-  const [selectedMonth, setSelectedMonth] = useState(9); // 9 = Жовтень (0-indexed)
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
 
   const monthLabel = useMemo(() => {
     const list = language === 'pl' ? MONTHS_PL : MONTHS_UA;
@@ -94,7 +94,7 @@ export default function StatisticsScreen() {
         : [];
 
       const total = monthBookings.length;
-      const completed = monthBookings.filter((b) => b.hasPayment).length;
+      const completed = monthBookings.filter((b) => b.status === 'COMPLETED' || b.hasPayment).length;
 
       setTotalBookingsCount(total);
       setCompletedBookingsCount(completed);
@@ -109,7 +109,7 @@ export default function StatisticsScreen() {
         daysStats.push({
           day: dayStr,
           total: dayBookings.length,
-          completed: dayBookings.filter((b) => b.hasPayment).length,
+          completed: dayBookings.filter((b) => b.status === 'COMPLETED' || b.hasPayment).length,
         });
       }
       setChartDaysData(daysStats);
@@ -363,8 +363,14 @@ export default function StatisticsScreen() {
 
         {/* Прогрес-бар розподілу онлайн / офлайн */}
         <View style={[styles.splitBarWrapper, { backgroundColor: colors.surface }]}>
-          <View style={[styles.splitBarOnline, { flex: Math.max(0.01, onlineSplit / 100) }]} />
-          <View style={[styles.splitBarOffline, { flex: Math.max(0.01, offlineSplit / 100) }]} />
+          {totalBookingsCount > 0 ? (
+            <>
+              <View style={[styles.splitBarOnline, { width: `${onlineSplit}%` }]} />
+              <View style={[styles.splitBarOffline, { width: `${offlineSplit}%` }]} />
+            </>
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: colors.surfaceLight }} />
+          )}
         </View>
 
         <View style={styles.splitLabelsRow}>

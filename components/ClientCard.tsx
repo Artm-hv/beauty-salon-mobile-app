@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ClientItem } from '../services/mockData';
@@ -7,9 +7,6 @@ import { useAppSettings } from '../context/AppSettingsContext';
 
 interface ClientCardProps {
   client: ClientItem;
-  onPress?: () => void;
-  showAddButton?: boolean;
-  onAddPress?: () => void;
 }
 
 /**
@@ -18,9 +15,6 @@ interface ClientCardProps {
  */
 export const ClientCard: React.FC<ClientCardProps> = ({
   client,
-  onPress,
-  showAddButton,
-  onAddPress,
 }) => {
   const { colors, t } = useAppSettings();
   const firstLetter = (client.name.charAt(0) || 'К').toUpperCase();
@@ -33,12 +27,8 @@ export const ClientCard: React.FC<ClientCardProps> = ({
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.88}
-      onPress={onPress}
-      style={[styles.card, { backgroundColor: colors.surface }]}
-    >
-      {/* 1. Верхній рядок: Аватар + Ім'я з CN-кодом + Стрілочка або кнопка Додати */}
+    <View style={[styles.card, { backgroundColor: colors.surface }]}>
+      {/* 1. Верхній рядок: Аватар + Ім'я з CN-кодом */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={[styles.avatarCircle, { backgroundColor: client.avatarColor || '#8B5CF6' }]}>
@@ -51,8 +41,6 @@ export const ClientCard: React.FC<ClientCardProps> = ({
             </Text>
           </View>
         </View>
-
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
       </View>
 
       {/* Розділювач */}
@@ -63,21 +51,20 @@ export const ClientCard: React.FC<ClientCardProps> = ({
         {/* Теги */}
         <View style={styles.detailRow}>
           <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.tags}</Text>
-          <TouchableOpacity activeOpacity={0.7} style={styles.tagLink}>
+          <View style={styles.tagLink}>
             <Text style={[styles.tagLinkText, { color: colors.textSecondary }]}>
               {client.tags && client.tags.length > 0 ? client.tags.join(', ') : t.clients.addTags}
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Телефон */}
         <View style={styles.detailRow}>
           <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.clients.phone}</Text>
-          <TouchableOpacity activeOpacity={0.7} style={styles.phoneBox}>
+          <View style={styles.phoneBox}>
             <MaterialCommunityIcons name="check-circle" size={15} color="#4CAF50" />
             <Text style={styles.phoneText}>{client.phone}</Text>
-            <MaterialCommunityIcons name="menu-down" size={16} color="#4CAF50" />
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Візитів */}
@@ -98,7 +85,7 @@ export const ClientCard: React.FC<ClientCardProps> = ({
           <Text style={[styles.valueHighlight, { color: colors.text }]}>{formatMoney(client.totalSpent)}</Text>
         </View>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 

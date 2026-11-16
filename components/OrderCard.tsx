@@ -59,6 +59,13 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
 
   const badge = getStatusBadge();
 
+  const cleanCashierName = (order.cashierName || 'Artem Hizhovskyi')
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace('Артем Гіжовський', 'Artem Hizhovskyi')
+    .replace('Ігор Намачинський', 'Ihor Namachynskyi')
+    .replace('Артем Лабунський', 'Artem Labynskyi')
+    .trim();
+
   return (
     <TouchableOpacity
       activeOpacity={0.88}
@@ -101,15 +108,10 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onPress }) => {
           </View>
         </View>
 
-        {/* Адміністратор */}
+        {/* Касир */}
         <View style={styles.detailRow}>
-          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.admin}</Text>
-          <View style={styles.personBox}>
-            <View style={[styles.avatarDot, { backgroundColor: '#10B981' }]}>
-              <MaterialCommunityIcons name="shield-account" size={12} color="#FFFFFF" />
-            </View>
-            <Text style={[styles.personName, { color: colors.text }]}>{order.cashierName}</Text>
-          </View>
+          <Text style={[styles.labelCol, { color: colors.textSecondary }]}>{t.cashier.cashier}</Text>
+          <Text style={[styles.personName, { color: colors.text }]}>{cleanCashierName}</Text>
         </View>
 
         {/* Кількість */}

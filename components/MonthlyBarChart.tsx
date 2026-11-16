@@ -42,9 +42,7 @@ export const DEFAULT_OCTOBER_DAYS_STATS: DayStat[] = [
   { day: '31', total: 5, completed: 0 },
 ];
 
-const Y_TICKS = [28, 23, 18, 13, 8, 3, -2];
 const CHART_HEIGHT = 160;
-const MAX_VALUE = 28;
 
 interface MonthlyBarChartProps {
   data?: DayStat[];
@@ -57,14 +55,18 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
   textColor = '#8E8E93',
   gridLineColor = '#1C1C1E',
 }) => {
+  const peak = Math.max(1, ...data.map(day => Math.max(day.total, day.completed)));
+  const step = Math.ceil(peak / 5);
+  const maximum = step * 5;
+  const ticks = [5, 4, 3, 2, 1, 0].map(i => i * step);
   return (
     <View style={styles.chartWrapper}>
       {/* Головна область графіка з фіксованою висотою */}
       <View style={styles.chartMain}>
         {/* Вісь Y зі значеннями */}
         <View style={styles.yAxis}>
-          {Y_TICKS.map((tick, index) => (
-            <View key={index} style={styles.yTickRow}>
+          {ticks.map((tick, index) => (
+            <View key={index} style={[styles.yTickRow, { top: CHART_HEIGHT * (1 - tick / maximum) - 10 }]}>
               <Text style={[styles.yTickText, { color: textColor }]}>
                 {tick}
               </Text>
@@ -80,13 +82,8 @@ export const MonthlyBarChart: React.FC<MonthlyBarChartProps> = ({
           contentContainerStyle={styles.barsContainer}
         >
           {data.map((item, idx) => {
-            // Розрахунок висоти стовпчиків від 0 до (CHART_HEIGHT - 20)
-            const availableHeight = CHART_HEIGHT - 25;
-            const totalHeight = Math.max(3, (Math.min(item.total, MAX_VALUE) / MAX_VALUE) * availableHeight);
-            const completedHeight =
-              item.completed > 0
-                ? Math.max(3, (Math.min(item.completed, MAX_VALUE) / MAX_VALUE) * availableHeight)
-                : 0;
+            const totalHeight = (item.total / maximum) * CHART_HEIGHT;
+            const completedHeight = (item.completed / maximum) * CHART_HEIGHT;
 
             const isLabelVisible = parseInt(item.day, 10) % 2 === 1;
 
@@ -158,6 +155,8 @@ const styles = StyleSheet.create({
     paddingRight: 6,
   },
   yTickRow: {
+    position: 'absolute',
+    right: 6,
     height: 20,
     justifyContent: 'center',
   },

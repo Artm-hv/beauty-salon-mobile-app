@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import {
-  MOCK_MASTERS,
   AppointmentItem,
   OrderItem,
   ClientItem,
@@ -54,105 +53,86 @@ function getApiCandidates(): string[] {
   return candidates;
 }
 
-// Функція запиту з перебором робочих серверів та таймаутом
-async function fetchWithFallback(endpoint: string, options: RequestInit = {}): Promise<Response | null> {
-  const urls = getApiCandidates().map((base) => `${base}${endpoint}`);
-
-  for (const url of urls) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5с таймаут
-
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        return response;
-      }
-    } catch {
-      // Пробуємо наступного кандидата
-    }
+// Remove private data cached by releases that predate server-backed sessions.
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  try {
+    for (const key of ['svoya_clients', 'svoya_appointments', 'svoya_orders']) window.localStorage.removeItem(key);
+  } catch {
+    // Browsers with storage disabled have no readable cache.
   }
-  return null;
 }
 
-// Персистентний стан у пам'яті / LocalStorage браузера
-let memoryClients: ClientItem[] = [];
-let memoryAppointments: AppointmentItem[] = [];
-let memoryOrders: OrderItem[] = [];
+let baseUrl: string | undefined;
+let token: string | undefined;
+let onUnauthorized = () => {};
 
-// Спроба прочитати з localStorage (у браузері)
-try {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    const savedClients = window.localStorage.getItem('svoya_clients');
-    if (savedClients) memoryClients = JSON.parse(savedClients);
+export function configureSession(value?: string, expired = () => {}) {
+  token = value;
+  onUnauthorized = expired;
+}
 
-    const savedAppts = window.localStorage.getItem('svoya_appointments');
-    if (savedAppts) memoryAppointments = JSON.parse(savedAppts);
-
-    const savedOrders = window.localStorage.getItem('svoya_orders');
-    if (savedOrders) memoryOrders = JSON.parse(savedOrders);
-  }
-} catch {}
-
-const persistState = () => {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('svoya_clients', JSON.stringify(memoryClients));
-      window.localStorage.setItem('svoya_appointments', JSON.stringify(memoryAppointments));
-      window.localStorage.setItem('svoya_orders', JSON.stringify(memoryOrders));
+async function discover() {
+  for (const base of new Set(getApiCandidates())) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    try {
+      const response = await fetch(base + '/health', { signal: controller.signal });
+      if (response.ok && (await response.json()).app === 'Svoya Nail Studio') return base;
+    } catch {
+      // Try the next transport only during read-only discovery.
+    } finally {
+      clearTimeout(timer);
     }
-  } catch {}
-};
+  }
+  throw new Error('Сервер недоступний. Перевірте з’єднання.');
+}
 
-/**
- * Шар абстракції REST API клієнта
- * Вимога предмету університету: 3 методи API (GET, POST, PUT)
- * Зона відповідальності: Розробник 2 (Артем Гіжовський)
- */
+export class ApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+export async function request<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
+  baseUrl ??= await discover();
+  const session = token;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(baseUrl + path, {
+      method, signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: 'Bearer ' + session } : {}) },
+      body: data === undefined ? undefined : JSON.stringify(data),
+    });
+    const result = await response.json();
+    if (session !== token) throw new Error('Сеанс змінився');
+    if (!response.ok) {
+      if (response.status === 401 && session) onUnauthorized();
+      throw new ApiError(response.status, result.error || 'Помилка сервера');
+    }
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const apiClient = {
-  /**
-   * 1. Метод GET: Отримання списку майстрів (GET /api/masters)
-   * Майстри: Артем Гіжовський, Ігор Намачинський, Артем Лабунський
-   */
-  getMasters: async (): Promise<Master[]> => {
-    try {
-      const response = await fetchWithFallback('/masters', { method: 'GET' });
-      if (response) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) return data;
-      }
-    } catch {}
-    return MOCK_MASTERS;
-  },
-
-  /**
-   * 1. Метод GET: Отримання CRM-бази клієнтів (GET /api/clients)
-   */
-  getClients: async (): Promise<ClientItem[]> => {
-    try {
-      const response = await fetchWithFallback('/clients', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (response) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          memoryClients = data;
-          persistState();
-          return data;
-        }
-      }
-    } catch {}
-    return [...memoryClients];
-  },
-
-  /**
-   * 2. Метод POST: Створення нового клієнта (POST /api/clients)
-   */
+  getMasters: () => request<Master[]>('/masters'),
+  getClients: () => request<ClientItem[]>('/clients'),
+  getBookings: () => request<AppointmentItem[]>('/bookings'),
+  getAppointments: () => request<AppointmentItem[]>('/bookings'),
+  getAppointment: (id: string) => request<AppointmentItem>('/bookings/' + encodeURIComponent(id)),
+  getOrders: () => request<OrderItem[]>('/orders'),
+  getUsers: () => request<User[]>('/users'),
+  createBooking: (booking: Omit<AppointmentItem, 'id'> & { services: string[] }) =>
+    request<AppointmentItem>('/bookings', 'POST', booking),
+  updateAppointment: (id: string, changes: Partial<Pick<AppointmentItem, 'status' | 'photoUri' | 'masterId' | 'notes' | 'date' | 'startTime'>>) =>
+    request<AppointmentItem>('/bookings/' + encodeURIComponent(id), 'PUT', changes),
+  updateOrderStatus: (id: string, status: OrderItem['status']) =>
+    request('/orders/' + encodeURIComponent(id), 'PUT', { status }),
+  updateUserRole: (id: string, role: UserRole) => request('/users/' + encodeURIComponent(id), 'PUT', { role }),
+  deleteUser: (id: string) => request('/users/' + encodeURIComponent(id), 'DELETE'),
+  clearAllData: () => request('/reset', 'POST'),
   createClient: async (clientData: {
     name: string;
     phone: string;
@@ -169,34 +149,14 @@ export const apiClient = {
       visitCount: 0,
       averageCheck: 0,
       totalSpent: 0,
-      lastVisitDate: new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' }),
+      lastVisitDate: '',
       avatarColor: ['#8B5CF6', '#10B981', '#38BDF8', '#EC4899', '#F59E0B'][
         Math.floor(Math.random() * 5)
       ],
     };
 
-    try {
-      const response = await fetchWithFallback('/clients', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newClient),
-      });
-      if (response) {
-        const serverData = await response.json();
-        memoryClients = [serverData, ...memoryClients.filter((c) => c.id !== serverData.id)];
-        persistState();
-        return serverData;
-      }
-    } catch {}
-
-    memoryClients = [newClient, ...memoryClients];
-    persistState();
-    return newClient;
+    return request<ClientItem>('/clients', 'POST', newClient);
   },
-
-  /**
-   * 3. Метод POST: Імпорт готової бази клієнтів (Імпорт бази)
-   */
   importClientsDatabase: async (): Promise<ClientItem[]> => {
     const defaultClients: ClientItem[] = [
       {
@@ -305,309 +265,10 @@ export const apiClient = {
       },
     ];
 
-    try {
-      for (const client of defaultClients) {
-        await fetchWithFallback('/clients', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(client),
-        });
-      }
-    } catch {}
-
-    const existingPhones = new Set(memoryClients.map((c) => c.phone));
-    const toAdd = defaultClients.filter((c) => !existingPhones.has(c.phone));
-    memoryClients = [...toAdd, ...memoryClients];
-    persistState();
-    return memoryClients;
-  },
-
-  /**
-   * 1. Метод GET: Отримання розкладу візитів (GET /api/bookings)
-   */
-  getAppointments: async (): Promise<AppointmentItem[]> => {
-    try {
-      const response = await fetchWithFallback('/bookings', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (response) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          memoryAppointments = data;
-          persistState();
-          return data;
-        }
-      }
-    } catch {}
-    return [...memoryAppointments];
-  },
-
-  /**
-   * Аліас для отримання бронювань (GET /api/bookings)
-   */
-  getBookings: async (): Promise<AppointmentItem[]> => {
-    return apiClient.getAppointments();
-  },
-
-  /**
-   * 2. Метод POST: Створення нового бронювання / візиту (POST /api/bookings)
-   */
-  createBooking: async (bookingData: {
-    masterId: string;
-    clientName: string;
-    clientPhone: string;
-    serviceName: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    price: number;
-    notes?: string;
-    colorType?: 'mustard' | 'green' | 'red' | 'blue';
-    source?: string;
-  }): Promise<{ success: boolean; data: AppointmentItem }> => {
-    const appointmentId = `b-${Date.now()}`;
-    const newAppointment: AppointmentItem = {
-      id: appointmentId,
-      masterId: bookingData.masterId,
-      clientName: bookingData.clientName,
-      clientPhone: bookingData.clientPhone,
-      serviceName: bookingData.serviceName,
-      notes: bookingData.notes || '',
-      date: bookingData.date,
-      startTime: bookingData.startTime,
-      endTime: bookingData.endTime,
-      price: bookingData.price,
-      colorType: bookingData.colorType || 'mustard',
-      hasPayment: false,
-      hasComment: !!bookingData.notes,
-      isConfirmed: true,
-      source: bookingData.source || 'Instagram',
-    };
-
-    // Автоматичне створення чека в касі для відповідності операції
-    // Зв'язок: order.id = "ord-{appointmentId}" для синхронізації оплати
-    const newOrder: OrderItem = {
-      id: `ord-${appointmentId}`,
-      orderNumber: `№${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'UNPAID',
-      date: `${bookingData.date} ${bookingData.startTime}`,
-      clientName: bookingData.clientName,
-      clientPhone: bookingData.clientPhone,
-      cashierName: 'Артем Гіжовський (Адміністратор)',
-      itemsCount: 1,
-      services: [bookingData.serviceName],
-      totalAmount: bookingData.price,
-      paymentMethod: 'CARD',
-    };
-
-    try {
-      const response = await fetchWithFallback('/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAppointment),
-      });
-      if (response) {
-        const serverAppt = await response.json();
-        memoryAppointments = [serverAppt, ...memoryAppointments.filter((b) => b.id !== serverAppt.id)];
-        memoryOrders = [newOrder, ...memoryOrders];
-        persistState();
-        return { success: true, data: serverAppt };
-      }
-    } catch {}
-
-    memoryAppointments = [newAppointment, ...memoryAppointments];
-    memoryOrders = [newOrder, ...memoryOrders];
-    persistState();
-    return { success: true, data: newAppointment };
-  },
-
-  /**
-   * 1. Метод GET: Отримання списку замовлень каси (GET /api/orders)
-   */
-  getOrders: async (): Promise<OrderItem[]> => {
-    try {
-      const response = await fetchWithFallback('/orders', {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (response) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          memoryOrders = data;
-          persistState();
-          return data;
-        }
-      }
-    } catch {}
-    return [...memoryOrders];
-  },
-
-  /**
-   * 2. Метод POST: Створення швидкого чека в касі (POST /api/orders)
-   */
-  createOrder: async (orderData: Partial<OrderItem>): Promise<OrderItem> => {
-    const newOrd: OrderItem = {
-      id: `ord-${Date.now()}`,
-      orderNumber: `№${Math.floor(1000 + Math.random() * 9000)}`,
-      status: orderData.status || 'UNPAID',
-      date: orderData.date || new Date().toLocaleString('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
-      clientName: orderData.clientName || 'Клієнт',
-      clientPhone: orderData.clientPhone || '+380 00 000 0000',
-      cashierName: orderData.cashierName || 'Артем Гіжовський (Адміністратор)',
-      itemsCount: orderData.itemsCount || 1,
-      services: orderData.services || ['Комплексний манікюр'],
-      totalAmount: orderData.totalAmount || 700,
-      paymentMethod: orderData.paymentMethod || 'CARD',
-    };
-
-    try {
-      const response = await fetchWithFallback('/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newOrd),
-      });
-      if (response) {
-        const serverOrd = await response.json();
-        memoryOrders = [serverOrd, ...memoryOrders];
-        persistState();
-        return serverOrd;
-      }
-    } catch {}
-
-    memoryOrders = [newOrd, ...memoryOrders];
-    persistState();
-    return newOrd;
-  },
-
-  /**
-   * 3. Метод PUT: Оновлення статусу візиту (PUT /api/bookings/{id})
-   */
-  completeAppointment: async (
-    bookingId: string,
-    payload: {
-      status: 'COMPLETED' | 'CANCELLED';
-      notes?: string;
+    const phones = new Set((await apiClient.getClients()).map(c => c.phone));
+    for (const client of defaultClients) {
+      if (!phones.has(client.phone)) await request('/clients', 'POST', client);
     }
-  ): Promise<{ success: boolean; updatedBooking?: any }> => {
-    try {
-      await fetchWithFallback(`/bookings/${bookingId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch {}
-
-    // Оновлення в локальному стані
-    memoryAppointments = memoryAppointments.map((item) => {
-      if (item.id === bookingId) {
-        return {
-          ...item,
-          hasPayment: payload.status === 'COMPLETED' ? true : item.hasPayment,
-          notes: payload.notes || item.notes,
-        };
-      }
-      return item;
-    });
-    persistState();
-
-    return { success: true, updatedBooking: { id: bookingId, ...payload } };
-  },
-
-  /**
-   * 3. Метод PUT: Оновлення статусу замовлення в касі (PUT /api/orders/{id})
-   */
-  updateOrderStatus: async (
-    orderId: string,
-    status: 'COMPLETED' | 'UNPAID' | 'CANCELLED'
-  ): Promise<{ success: boolean }> => {
-    try {
-      await fetchWithFallback(`/orders/${orderId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-    } catch {}
-
-    memoryOrders = memoryOrders.map((ord) => (ord.id === orderId ? { ...ord, status } : ord));
-
-    // Якщо замовлення оплачено — синхронізувати статус у відповідному бронюванні (календарі)
-    if (status === 'COMPLETED') {
-      // Зв'язок: order.id = "ord-{bookingId}"
-      const bookingId = orderId.startsWith('ord-') ? orderId.substring(4) : null;
-      if (bookingId) {
-        try {
-          await fetchWithFallback(`/bookings/${bookingId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'COMPLETED' }),
-          });
-        } catch {}
-
-        memoryAppointments = memoryAppointments.map((item) => {
-          if (item.id === bookingId || item.id === `b-${bookingId}`) {
-            return { ...item, hasPayment: true, colorType: 'green' };
-          }
-          return item;
-        });
-      }
-    }
-
-    persistState();
-    return { success: true };
-  },
-
-  /**
-   * Очистити створені дані (скидання до чистого стану)
-   */
-  clearAllData: async () => {
-    try {
-      await fetchWithFallback('/reset', { method: 'POST' });
-    } catch {}
-    memoryClients = [];
-    memoryAppointments = [];
-    memoryOrders = [];
-    persistState();
-  },
-
-  /**
-   * 4. Отримання списку співробітників (GET /api/users)
-   */
-  getUsers: async (): Promise<User[]> => {
-    try {
-      const response = await fetchWithFallback('/users', { method: 'GET' });
-      if (response) {
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) return data;
-      }
-    } catch {}
-    return [
-      { id: 'user-admin-1', firstName: 'Артем', lastName: 'Гіжовський', email: 'admin@svoya.ua', phone: '+380 68 111 2233', role: 'ADMIN' },
-      { id: 'user-master-1', firstName: 'Артем', lastName: 'Гіжовський', email: 'artem@svoya.ua', phone: '+380 68 931 7049', role: 'MASTER' },
-      { id: 'user-ihor-1', firstName: 'Ігор', lastName: 'Намачинський', email: 'ihor@svoya.ua', phone: '+380 67 123 4567', role: 'MASTER' },
-      { id: 'user-labunskyi-1', firstName: 'Артем', lastName: 'Лабунський', email: 'labunskyi@svoya.ua', phone: '+380 67 987 6543', role: 'MASTER' },
-      { id: 'user-master-veronika', firstName: 'Вероніка', lastName: 'Гіжовська', email: 'veronika@svoya.ua', phone: '+380 67 222 3344', role: 'MASTER' },
-      { id: 'user-master-yulia', firstName: 'Юлія', lastName: 'Півень', email: 'yulia@svoya.ua', phone: '+380 67 333 4455', role: 'MASTER' },
-      { id: 'user-pending-1', firstName: 'Оксана', lastName: 'Кравченко', email: 'oksana@svoya.ua', phone: '+380 67 999 8877', role: 'PENDING' },
-      { id: 'user-pending-2', firstName: 'Дарина', lastName: 'Сидоренко', email: 'daryna@svoya.ua', phone: '+380 50 123 4567', role: 'PENDING' },
-    ];
-  },
-
-  /**
-   * 5. Оновлення ролі співробітника (PUT /api/users/:id)
-   */
-  updateUserRole: async (userId: string, role: UserRole): Promise<{ success: boolean; data?: User }> => {
-    try {
-      const response = await fetchWithFallback(`/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role }),
-      });
-      if (response) {
-        const resData = await response.json();
-        return resData;
-      }
-    } catch {}
-    return { success: true };
+    return apiClient.getClients();
   },
 };

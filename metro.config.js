@@ -1,306 +1,45 @@
 const { getDefaultConfig } = require('expo/metro-config');
-const fs = require('fs');
-const path = require('path');
+const http = require('node:http');
+const { spawn } = require('node:child_process');
+const path = require('node:path');
 
 const config = getDefaultConfig(__dirname);
+// Development bundles must never include the server's private data file.
+config.resolver.blockList = [
+  ...[].concat(config.resolver.blockList || []),
+  /[/\\]data[/\\]database\.(?:json|tmp)$/,
+];
+const enhance = config.server?.enhanceMiddleware;
+let backend;
 
-const DB_FILE = path.join(__dirname, 'data', 'database.json');
-
-function loadDb() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    }
-  } catch (e) {}
-  return { masters: [], clients: [], bookings: [], orders: [] };
+function startBackend() {
+  if (backend) return;
+  backend = spawn(process.env.PYTHON || 'python', [path.join(__dirname, 'backend', 'server.py')], {
+    stdio: 'inherit', windowsHide: true,
+  });
+  backend.on('error', (error) => console.error('Salon API:', error.message));
+  backend.on('close', () => { backend = undefined; });
 }
-
-function saveDb(data) {
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) {}
-}
-
-const originalEnhanceMiddleware = config.server?.enhanceMiddleware;
+process.once('exit', () => backend?.kill());
 
 config.server = {
   ...config.server,
-  enhanceMiddleware: (metroMiddleware, server) => {
-    const parent = originalEnhanceMiddleware
-      ? originalEnhanceMiddleware(metroMiddleware, server)
-      : metroMiddleware;
-
+  enhanceMiddleware(middleware, server) {
+    const nextMiddleware = enhance ? enhance(middleware, server) : middleware;
     return (req, res, next) => {
-      // Дозволяємо CORS для взаємодії між пристроями
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS, DELETE');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-      if (req.method === 'OPTIONS') {
-        res.statusCode = 204;
-        res.end();
-        return;
-      }
-
-      const url = req.url || '';
-      const [pathname] = url.split('?');
-
-      if (pathname.startsWith('/api/')) {
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-
-        req.on('end', () => {
-          let data = {};
-          if (body) {
-            try {
-              data = JSON.parse(body);
-            } catch (e) {}
-          }
-
-          const db = loadDb();
-
-          // 1. Метод GET (Отримання списків)
-          if (req.method === 'GET') {
-            if (pathname === '/api/clients') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify(db.clients || []));
-              return;
-            }
-            if (pathname === '/api/bookings') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify(db.bookings || []));
-              return;
-            }
-            if (pathname === '/api/orders') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify(db.orders || []));
-              return;
-            }
-            if (pathname === '/api/masters') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify(db.masters || []));
-              return;
-            }
-            if (pathname === '/api/users') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify(db.users || []));
-              return;
-            }
-            if (pathname.startsWith('/api/users/')) {
-              const uId = pathname.replace('/api/users/', '');
-              const user = (db.users || []).find((u) => u.id === uId);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = user ? 200 : 404;
-              res.end(JSON.stringify(user || { error: 'User not found' }));
-              return;
-            }
-            if (pathname === '/api/health') {
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify({ status: 'ok', source: 'metro_middleware' }));
-              return;
-            }
-          }
-
-          // 2. Метод POST (Створення записів)
-          if (req.method === 'POST') {
-            if (pathname === '/api/clients') {
-              db.clients = db.clients || [];
-              db.clients.unshift(data);
-              saveDb(db);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 201;
-              res.end(JSON.stringify(data));
-              return;
-            }
-            if (pathname === '/api/bookings') {
-              db.bookings = db.bookings || [];
-              db.bookings.unshift(data);
-
-              // Оновлення лічильника майстра
-              if (data.masterId && db.masters) {
-                const m = db.masters.find((x) => x.id === data.masterId);
-                if (m) m.appointmentCount = (m.appointmentCount || 0) + 1;
-              }
-
-              // Автоматичне створення чека в касі
-              db.orders = db.orders || [];
-              const newOrder = {
-                id: `ord-${data.id || Date.now()}`,
-                orderNumber: `№${1000 + db.orders.length}`,
-                status: 'UNPAID',
-                date: `${data.date || ''} ${data.startTime || ''}`,
-                clientName: data.clientName || 'Клієнт',
-                clientPhone: data.clientPhone || '',
-                cashierName: 'Артем Гіжовський (Адміністратор)',
-                itemsCount: 1,
-                services: [data.serviceName || 'Послуга'],
-                totalAmount: data.price || 0,
-                paymentMethod: 'CARD',
-              };
-              db.orders.unshift(newOrder);
-
-              saveDb(db);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 201;
-              res.end(JSON.stringify(data));
-              return;
-            }
-            if (pathname === '/api/orders') {
-              db.orders = db.orders || [];
-              db.orders.unshift(data);
-              saveDb(db);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 201;
-              res.end(JSON.stringify(data));
-              return;
-            }
-            if (pathname === '/api/auth/register' || pathname === '/api/users') {
-              db.users = db.users || [];
-              const newUser = {
-                id: data.id || `user-${Date.now()}`,
-                firstName: data.firstName || '',
-                lastName: data.lastName || '',
-                email: (data.email || '').toLowerCase(),
-                phone: data.phone || '',
-                role: data.role || 'PENDING',
-              };
-              db.users.unshift(newUser);
-              saveDb(db);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 201;
-              res.end(JSON.stringify({ success: true, user: newUser }));
-              return;
-            }
-            if (pathname === '/api/reset') {
-              const defaultData = {
-                masters: [
-                  {
-                    id: 'master-1',
-                    name: 'Артем Гіжовський',
-                    shortName: 'Артем Г.',
-                    specialty: 'Топ-майстер / Адмін',
-                    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop&crop=faces',
-                    appointmentCount: 0,
-                  },
-                  {
-                    id: 'master-2',
-                    name: 'Ігор Намачинський',
-                    shortName: 'Ігор Н.',
-                    specialty: 'Майстер',
-                    avatarUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&h=100&fit=crop&crop=faces',
-                    appointmentCount: 0,
-                  },
-                  {
-                    id: 'master-3',
-                    name: 'Артем Лабунський',
-                    shortName: 'Артем Л.',
-                    specialty: 'Майстер',
-                    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces',
-                    appointmentCount: 0,
-                  },
-                ],
-                clients: [],
-                bookings: [],
-                orders: [],
-              };
-              saveDb(defaultData);
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.statusCode = 200;
-              res.end(JSON.stringify({ success: true, message: 'Database reset' }));
-              return;
-            }
-          }
-
-          // 3. Метод PUT (Оновлення записів)
-          if (req.method === 'PUT') {
-            if (pathname.startsWith('/api/bookings/')) {
-              const bId = pathname.replace('/api/bookings/', '');
-              db.bookings = db.bookings || [];
-              let updated = null;
-              for (const b of db.bookings) {
-                if (b.id === bId) {
-                  if (data.status === 'COMPLETED') b.hasPayment = true;
-                  if (data.notes) b.notes = data.notes;
-                  updated = b;
-                  break;
-                }
-              }
-              if (updated) {
-                saveDb(db);
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.statusCode = 200;
-                res.end(JSON.stringify({ success: true, data: updated }));
-                return;
-              }
-            }
-            if (pathname.startsWith('/api/users/')) {
-              const uId = pathname.replace('/api/users/', '').split('/')[0];
-              db.users = db.users || [];
-              let updated = null;
-              for (const u of db.users) {
-                if (u.id === uId) {
-                  if (data.role) u.role = data.role;
-                  updated = u;
-                  break;
-                }
-              }
-              if (updated) {
-                saveDb(db);
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.statusCode = 200;
-                res.end(JSON.stringify({ success: true, data: updated }));
-                return;
-              }
-            }
-            if (pathname.startsWith('/api/orders/')) {
-              const oId = pathname.replace('/api/orders/', '');
-              db.orders = db.orders || [];
-              let updated = null;
-              for (const o of db.orders) {
-                if (o.id === oId) {
-                  if (data.status) o.status = data.status;
-                  updated = o;
-                  break;
-                }
-              }
-              if (updated) {
-                // Синхронізація: якщо замовлення сплачено, оновлюємо запис у календарі
-                if (updated.status === 'COMPLETED') {
-                  const targetBId = oId.replace('ord-', '');
-                  db.bookings = db.bookings || [];
-                  for (const b of db.bookings) {
-                    if (b.id === targetBId || b.id === `b-${targetBId}`) {
-                      b.hasPayment = true;
-                      b.colorType = 'green';
-                    }
-                  }
-                }
-
-                saveDb(db);
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.statusCode = 200;
-                res.end(JSON.stringify({ success: true, data: updated }));
-                return;
-              }
-            }
-          }
-
-          res.statusCode = 404;
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          res.end(JSON.stringify({ error: 'Endpoint not found' }));
-        });
-        return;
-      }
-
-      return parent(req, res, next);
+      if (!req.url.startsWith('/api/')) return nextMiddleware(req, res, next);
+      const upstream = http.request({
+        hostname: '127.0.0.1', port: 8000, path: req.url, method: req.method, headers: req.headers,
+      }, (response) => {
+        res.writeHead(response.statusCode, response.headers);
+        response.pipe(res);
+      });
+      upstream.on('error', (error) => {
+        if (error.code === 'ECONNREFUSED') startBackend();
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Сервер тимчасово недоступний' }));
+      });
+      req.pipe(upstream);
     };
   },
 };

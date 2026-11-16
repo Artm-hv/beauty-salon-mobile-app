@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import { useAlert } from '../context/AlertContext';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Avatar, Card, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { apiClient } from '../services/api';
 import { authService } from '../services/authService';
@@ -20,23 +22,35 @@ import { User, UserRole } from '../constants/types';
  * Зона відповідальності: Артем Лабунський (Розробник 3)
  */
 export default function StaffScreen() {
+  const showAlert = useAlert();
   const router = useRouter();
-  const { colors, t } = useAppSettings();
+  const { colors, t, language } = useAppSettings();
   const currentUser = authService.getCurrentUser();
   const isAdmin = currentUser?.role === 'ADMIN';
 
   const [usersList, setUsersList] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const fetchUsers = async () => {
-    setLoading(true);
     try {
       const data = await apiClient.getUsers();
-      setUsersList(data);
+      if (Array.isArray(data)) {
+        setUsersList(data);
+      }
     } catch {}
     setLoading(false);
+    setRefreshing(false);
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isAdmin) {
+        fetchUsers();
+      }
+    }, [isAdmin])
+  );
 
   useEffect(() => {
     if (!isAdmin) {
@@ -44,6 +58,18 @@ export default function StaffScreen() {
       return;
     }
     fetchUsers();
+
+    // Автоматичне фонове оновлення кожні 3 секунди
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiClient.getUsers();
+        if (Array.isArray(data)) {
+          setUsersList(data);
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
   }, [isAdmin]);
 
   // Надання ролі новому користувачеві (реальний запит до сервера)
@@ -56,9 +82,50 @@ export default function StaffScreen() {
       setMessage(t.staff.roleAssigned);
       setTimeout(() => setMessage(null), 3000);
     } catch {
-      setMessage('Помилка під час зміни ролі');
+      setMessage(language === 'pl' ? 'Błąd podczas zmiany roli' : 'Помилка під час зміни ролі');
       setTimeout(() => setMessage(null), 3000);
     }
+  };
+
+  // Скидання ролі (переведення в очікування PENDING)
+  const handleRevokeRole = async (user: User) => {
+    try {
+      await apiClient.updateUserRole(user.id, 'PENDING');
+      setUsersList((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, role: 'PENDING' } : u))
+      );
+      setMessage(t.staff.revokeSuccess);
+      setTimeout(() => setMessage(null), 3000);
+    } catch {
+      setMessage(language === 'pl' ? 'Błąd podczas zmiany roli' : 'Помилка під час зміни ролі');
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
+
+  // Звільнення / повне видалення користувача
+  const handleFireUser = (user: User) => {
+    showAlert(
+      t.staff.fireConfirmTitle,
+      `${t.staff.fireConfirmMsg}\n\n${user.firstName} ${user.lastName} (${user.email})`,
+      [
+        { text: t.common.cancel, style: 'cancel' },
+        {
+          text: t.staff.fireStaff,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiClient.deleteUser(user.id);
+              setUsersList((prev) => prev.filter((u) => u.id !== user.id));
+              setMessage(t.staff.fireSuccess);
+              setTimeout(() => setMessage(null), 3000);
+            } catch {
+              setMessage(language === 'pl' ? 'Błąd podczas usuwania' : 'Помилка під час видалення');
+              setTimeout(() => setMessage(null), 3000);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const pendingUsers = usersList.filter((u) => u.role === 'PENDING');
@@ -92,7 +159,20 @@ export default function StaffScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchUsers();
+            }}
+            tintColor={colors.primary}
+          />
+        }
+      >
         {message && (
           <View style={styles.successBanner}>
             <MaterialCommunityIcons name="check-circle" size={18} color="#10B981" />
@@ -155,7 +235,7 @@ export default function StaffScreen() {
 
                   <Divider style={{ backgroundColor: colors.divider, marginVertical: 12 }} />
 
-                  {/* Кнопки надання ролі */}
+                  {/* Кнопки надання ролі та відхилення */}
                   <View style={styles.actionsRow}>
                     <TouchableOpacity
                       style={styles.makeMasterBtn}
@@ -174,6 +254,14 @@ export default function StaffScreen() {
                       <MaterialCommunityIcons name="shield-account" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text style={styles.btnTextWhite}>{t.staff.makeAdmin}</Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.rejectBtn}
+                      activeOpacity={0.8}
+                      onPress={() => handleFireUser(user)}
+                    >
+                      <MaterialCommunityIcons name="trash-can-outline" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                   </View>
                 </Card>
               ))
@@ -188,6 +276,10 @@ export default function StaffScreen() {
 
             {activeStaff.map((user) => {
               const isUserAdmin = user.role === 'ADMIN';
+              const isSelf =
+                user.id === currentUser?.id ||
+                (currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase());
+
               return (
                 <Card
                   key={user.id}
@@ -205,23 +297,30 @@ export default function StaffScreen() {
                         <Text style={[styles.userName, { color: colors.text }]}>
                           {user.firstName} {user.lastName}
                         </Text>
-                        <View
-                          style={[
-                            styles.roleBadge,
-                            {
-                              backgroundColor: isUserAdmin ? '#8B5CF622' : '#2563EB22',
-                              borderColor: isUserAdmin ? '#8B5CF666' : '#2563EB66',
-                            },
-                          ]}
-                        >
-                          <Text
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          {isSelf && (
+                            <View style={styles.selfBadge}>
+                              <Text style={styles.selfBadgeText}>{t.staff.youBadge}</Text>
+                            </View>
+                          )}
+                          <View
                             style={[
-                              styles.roleBadgeText,
-                              { color: isUserAdmin ? '#A78BFA' : '#60A5FA' },
+                              styles.roleBadge,
+                              {
+                                backgroundColor: isUserAdmin ? '#8B5CF622' : '#2563EB22',
+                                borderColor: isUserAdmin ? '#8B5CF666' : '#2563EB66',
+                              },
                             ]}
                           >
-                            {isUserAdmin ? t.staff.admin : t.staff.master}
-                          </Text>
+                            <Text
+                              style={[
+                                styles.roleBadgeText,
+                                { color: isUserAdmin ? '#A78BFA' : '#60A5FA' },
+                              ]}
+                            >
+                              {isUserAdmin ? t.staff.admin : t.staff.master}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                       <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
@@ -232,6 +331,31 @@ export default function StaffScreen() {
                       </Text>
                     </View>
                   </View>
+
+                  {!isSelf ? (
+                    <View>
+                      <Divider style={{ backgroundColor: colors.divider, marginVertical: 12 }} />
+                      <View style={styles.actionsRow}>
+                        <TouchableOpacity
+                          style={styles.revokeBtn}
+                          activeOpacity={0.8}
+                          onPress={() => handleRevokeRole(user)}
+                        >
+                          <MaterialCommunityIcons name="account-arrow-left" size={17} color="#F59E0B" style={{ marginRight: 6 }} />
+                          <Text style={[styles.btnText, { color: '#F59E0B' }]}>{t.staff.revokeRole}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.fireBtn}
+                          activeOpacity={0.8}
+                          onPress={() => handleFireUser(user)}
+                        >
+                          <MaterialCommunityIcons name="trash-can-outline" size={17} color="#EF4444" style={{ marginRight: 6 }} />
+                          <Text style={[styles.btnText, { color: '#EF4444' }]}>{t.staff.fireStaff}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
                 </Card>
               );
             })}
@@ -385,6 +509,57 @@ const styles = StyleSheet.create({
   },
   btnTextWhite: {
     color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  rejectBtn: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#EF444420',
+    borderWidth: 1,
+    borderColor: '#EF444455',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selfBadge: {
+    backgroundColor: '#10B98125',
+    borderWidth: 1,
+    borderColor: '#10B98166',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  selfBadgeText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  revokeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F59E0B18',
+    borderWidth: 1,
+    borderColor: '#F59E0B55',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+  },
+  fireBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EF444418',
+    borderWidth: 1,
+    borderColor: '#EF444455',
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+  },
+  btnText: {
     fontSize: 12,
     fontWeight: '700',
   },

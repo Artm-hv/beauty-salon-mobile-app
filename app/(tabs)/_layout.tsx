@@ -3,15 +3,20 @@ import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAppSettings } from '../../context/AppSettingsContext';
-import { authService } from '../../services/authService';
+import { useCurrentUser } from '../../services/authService';
+
+export const unstable_settings = {
+  anchor: 'calendar',
+};
 
 export default function TabsLayout() {
   const { colors, isDark, t } = useAppSettings();
-  const currentUser = authService.getCurrentUser();
+  const currentUser = useCurrentUser();
   const isMaster = currentUser?.role === 'MASTER';
 
   return (
     <Tabs
+      backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.text,
@@ -37,7 +42,7 @@ export default function TabsLayout() {
         options={{
           title: t.tabs.calendar,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="calendar-month-outline" size={24} color={color} />
+            <MaterialCommunityIcons name="calendar-month-outline" size={24} color={color as any} />
           ),
         }}
       />
@@ -47,7 +52,7 @@ export default function TabsLayout() {
           href: isMaster ? null : undefined,
           title: t.tabs.cashier,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="wallet-outline" size={24} color={color} />
+            <MaterialCommunityIcons name="wallet-outline" size={24} color={color as any} />
           ),
         }}
       />
@@ -78,7 +83,7 @@ export default function TabsLayout() {
           href: isMaster ? null : undefined,
           title: t.tabs.clients,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="emoticon-happy-outline" size={24} color={color} />
+            <MaterialCommunityIcons name="emoticon-happy-outline" size={24} color={color as any} />
           ),
         }}
       />
@@ -87,7 +92,7 @@ export default function TabsLayout() {
         options={{
           title: t.tabs.more,
           tabBarIcon: ({ color }) => (
-            <MaterialCommunityIcons name="dots-grid" size={24} color={color} />
+            <MaterialCommunityIcons name="dots-grid" size={24} color={color as any} />
           ),
         }}
       />

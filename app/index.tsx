@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { TextInput, Button, Text, Surface, HelperText, Chip } from 'react-native-paper';
+import { TextInput, Button, Text, Surface, HelperText } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
-import { authService, DEMO_ACCOUNTS } from '../services/authService';
+import { authService } from '../services/authService';
 
 /**
  * Екран 0: Авторизація (LoginScreen)
@@ -18,7 +18,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorKey, setErrorKey] = useState<keyof typeof t.auth | null>(null);
+  const errorMessage = errorKey ? t.auth[errorKey] : '';
 
   // Валідація полів
   const isEmailValid = () => {
@@ -27,18 +28,18 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    setErrorMessage('');
+    setErrorKey(null);
 
     if (!email.trim()) {
-      setErrorMessage(t.auth.validationEmptyEmail);
+      setErrorKey('validationEmptyEmail');
       return;
     }
     if (!isEmailValid()) {
-      setErrorMessage(t.auth.validationEmail);
+      setErrorKey('validationEmail');
       return;
     }
     if (!password) {
-      setErrorMessage(t.auth.validationEmptyPassword);
+      setErrorKey('validationEmptyPassword');
       return;
     }
 
@@ -56,21 +57,11 @@ export default function LoginScreen() {
           router.replace('/(tabs)/calendar');
         }
       } else {
-        setErrorMessage(result.error || (language === 'pl' ? 'Błąd autoryzacji' : 'Помилка авторизації'));
+        setErrorKey(result.status === 401 ? 'invalidCredentials' : 'loginUnavailable');
       }
     } catch {
       setLoading(false);
-      setErrorMessage(language === 'pl' ? 'Nie udało się połączyć z serwerem' : 'Не вдалося з’єднатися з сервером');
-    }
-  };
-
-  // Швидке автозаповнення для показу викладачу
-  const fillDemoCredentials = (roleKey: 'master' | 'admin' | 'ihor' | 'labunskyi' | 'pending') => {
-    const account = DEMO_ACCOUNTS[roleKey];
-    if (account) {
-      setEmail(account.email);
-      setPassword(account.password);
-      setErrorMessage('');
+      setErrorKey('loginUnavailable');
     }
   };
 
@@ -132,7 +123,7 @@ export default function LoginScreen() {
             value={email}
             onChangeText={(text) => {
               setEmail(text);
-              setErrorMessage('');
+              setErrorKey(null);
             }}
             mode="outlined"
             keyboardType="email-address"
@@ -154,7 +145,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={(text) => {
               setPassword(text);
-              setErrorMessage('');
+              setErrorKey(null);
             }}
             mode="outlined"
             secureTextEntry={!isPasswordVisible}
@@ -185,7 +176,7 @@ export default function LoginScreen() {
             style={styles.loginButton}
             contentStyle={styles.buttonContent}
             buttonColor={colors.primary}
-            textColor="#000000"
+            textColor={isDark ? '#000000' : '#FFFFFF'}
           >
             {t.auth.loginButton}
           </Button>
@@ -201,52 +192,6 @@ export default function LoginScreen() {
           </TouchableOpacity>
         </Surface>
 
-        {/* Швидкі кнопки демо-входу для показу викладачу */}
-        <Surface
-          style={[
-            styles.demoSection,
-            { backgroundColor: colors.surface, borderColor: colors.cardBorder, borderWidth: 1 },
-          ]}
-          elevation={1}
-        >
-          <Text variant="labelMedium" style={[styles.demoTitle, { color: colors.textSecondary }]}>
-            {t.auth.demoTitle}
-          </Text>
-          <View style={styles.demoChipsRow}>
-            <Chip
-              icon="account"
-              onPress={() => fillDemoCredentials('master')}
-              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
-              textStyle={{ color: colors.text }}
-            >
-              Артем Г.
-            </Chip>
-            <Chip
-              icon="account"
-              onPress={() => fillDemoCredentials('ihor')}
-              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
-              textStyle={{ color: colors.text }}
-            >
-              Ігор Н.
-            </Chip>
-            <Chip
-              icon="account"
-              onPress={() => fillDemoCredentials('labunskyi')}
-              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
-              textStyle={{ color: colors.text }}
-            >
-              Артем Л.
-            </Chip>
-            <Chip
-              icon="shield-account"
-              onPress={() => fillDemoCredentials('admin')}
-              style={[styles.chip, { backgroundColor: colors.surfaceLight }]}
-              textStyle={{ color: colors.text }}
-            >
-              {language === 'pl' ? 'Admin' : 'Адмін'}
-            </Chip>
-          </View>
-        </Surface>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -257,6 +202,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     flexGrow: 1,
     padding: 20,
     justifyContent: 'center',

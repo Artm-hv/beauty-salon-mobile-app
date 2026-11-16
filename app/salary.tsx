@@ -11,7 +11,7 @@ import { Text, Card, Divider } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
-import { authService } from '../services/authService';
+import { authService, useCurrentUser } from '../services/authService';
 import { apiClient } from '../services/api';
 import { AppointmentItem, Master } from '../services/mockData';
 
@@ -30,7 +30,7 @@ interface SalaryTransaction {
 export default function SalaryScreen() {
   const router = useRouter();
   const { colors, t, language } = useAppSettings();
-  const currentUser = authService.getCurrentUser();
+  const currentUser = useCurrentUser();
   const isMaster = currentUser?.role === 'MASTER';
   const isAdmin = currentUser?.role === 'ADMIN';
 
@@ -51,25 +51,8 @@ export default function SalaryScreen() {
       ]);
 
       // Визначаємо ID майстра для поточного користувача
-      let matchedMasterId = 'master-3'; // За замовчуванням Артем Лабунський
-      if (currentUser) {
-        const found = masters.find(
-          (m) =>
-            m.name.toLowerCase().includes(currentUser.lastName.toLowerCase()) ||
-            m.name.toLowerCase().includes(currentUser.firstName.toLowerCase()) ||
-            m.id === currentUser.id
-        );
-        if (found) {
-          matchedMasterId = found.id;
-        } else if (currentUser.email.includes('artem')) {
-          matchedMasterId = 'master-1';
-        } else if (currentUser.email.includes('ihor')) {
-          matchedMasterId = 'master-2';
-        }
-      }
-
-      // Фільтруємо записи тільки для цього майстра
-      const myBookings = bookings.filter((b) => b.masterId === matchedMasterId);
+      const matchedMasterId = masters.find(m => m.userId === currentUser?.id)?.id;
+      const myBookings = bookings.filter(b => b.masterId === matchedMasterId && (b.status === 'COMPLETED' || b.hasPayment));
 
       // Якщо у майстра є реальні записи в базі, рахуємо з них (75% від послуги)
       const txList: SalaryTransaction[] = [];
@@ -77,7 +60,7 @@ export default function SalaryScreen() {
       let totalEarnedSum = 0;
 
       for (const b of myBookings) {
-        const masterReward = (b.price || 700) * 0.75; // Рівно 75% майстру
+        const masterReward = b.price * 0.75; // Рівно 75% майстру
         totalEarnedSum += masterReward;
         if (b.hasPayment) {
           balanceSum += masterReward;
@@ -89,26 +72,6 @@ export default function SalaryScreen() {
           client: `${b.clientName || (language === 'pl' ? 'Klient' : 'Клієнт')} (${b.clientPhone || ''})`,
           amount: masterReward,
         });
-      }
-
-      // Якщо записів небагато, додаємо індивідуальні виконані візити майстра для повноти
-      if (txList.length === 0) {
-        // У кожного майстра індивідуальні процедури
-        const seedMultiplier = matchedMasterId === 'master-1' ? 3 : matchedMasterId === 'master-2' ? 2 : 4;
-        for (let i = 1; i <= seedMultiplier; i++) {
-          const reward = (600 + i * 150) * 0.75;
-          balanceSum += reward;
-          totalEarnedSum += reward;
-          txList.push({
-            id: `seed-tx-${i}`,
-            date: language === 'pl' ? `1${i} paź 2026 14:00` : `1${i} жовт 2026 р. 14:00`,
-            service: i % 2 === 0
-              ? (language === 'pl' ? 'Hybryda + zdobienie' : 'Покриття гель-лак + дизайн')
-              : (language === 'pl' ? 'Kompleksowy manicure' : 'Комплексний манікюр'),
-            client: language === 'pl' ? `Klient #${1000 + i * 45}` : `Клієнт №${1000 + i * 45}`,
-            amount: reward,
-          });
-        }
       }
 
       setServicesCount(txList.length);

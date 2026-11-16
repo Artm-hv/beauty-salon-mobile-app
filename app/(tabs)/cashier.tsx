@@ -1,3 +1,4 @@
+import { useAlert } from '../../context/AlertContext';
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
@@ -5,9 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   RefreshControl,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,31 +21,117 @@ import { authService } from '../../services/authService';
 
 type OrderStatusTab = 'ALL' | 'UNPAID' | 'COMPLETED' | 'CANCELLED';
 
+const MONTHS_PL = [
+  'styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec',
+  'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień',
+];
+
+const MONTHS_UA = [
+  'січень', 'лютий', 'березень', 'квітень', 'травень', 'червень',
+  'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень',
+];
+
+const WEEKDAYS_SHORT_PL = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'];
+const WEEKDAYS_SHORT_UA = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
 /**
  * Екран: Замовлення (Каса)
  * Зона відповідальності: Розробник 2 (Артем Гіжовський)
  * Підключено збереження та зміну статусів замовлень (GET, POST, PUT)
  */
 export default function CashierScreen() {
+  const showAlert = useAlert();
   const router = useRouter();
-  const { colors, t, language } = useAppSettings();
+  const { colors, t, language, isDark } = useAppSettings();
   const currentUser = authService.getCurrentUser();
-  const currentRawName = currentUser
-    ? (currentUser.name || `${currentUser.firstName} ${currentUser.lastName}`.trim())
-    : 'Адміністратор салону';
-  const currentUserName = currentUser
-    ? `${currentRawName} (${currentUser.role === 'ADMIN' ? (language === 'pl' ? 'Administrator' : 'Адміністратор') : (language === 'pl' ? 'Mistrz' : 'Майстер')})`
-    : 'Адміністратор салону';
 
   const [activeTab, setActiveTab] = useState<OrderStatusTab>('ALL');
-  const [dateRange, setDateRange] = useState(
-    language === 'pl' ? '10 wrz 2026 r. - 11 paź 2026 r.' : '10 вер 2026 р. - 11 жовт 2026 р.'
-  );
-  const [selectedExecutor, setSelectedExecutor] = useState('ALL');
+  const [selectedDate, setSelectedDate] = useState<string>('ALL'); // 'ALL' або 'YYYY-MM-DD'
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+  const [pickerMonth, setPickerMonth] = useState(() => new Date().getMonth());
+
   const [searchQuery, setSearchQuery] = useState('');
   const [ordersList, setOrdersList] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const toIsoDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const formatPillDate = (dateStr: string) => {
+    if (dateStr === 'ALL') {
+      return language === 'pl' ? 'Wszystkie daty' : 'Всі дати';
+    }
+    const [y, m, d] = dateStr.split('-');
+    const mIndex = parseInt(m, 10) - 1;
+    const mName = language === 'pl' ? MONTHS_PL[mIndex] : MONTHS_UA[mIndex];
+    const shortMonth = mName ? mName.slice(0, 3) : '';
+    return language === 'pl'
+      ? `${parseInt(d, 10)} ${shortMonth} ${y}`
+      : `${parseInt(d, 10)} ${shortMonth} ${y} р.`;
+  };
+
+  const pickerMonthLabel = useMemo(() => {
+    const list = language === 'pl' ? MONTHS_PL : MONTHS_UA;
+    const name = list[pickerMonth] || '';
+    return `${name.charAt(0).toUpperCase() + name.slice(1)} ${pickerYear}`;
+  }, [language, pickerMonth, pickerYear]);
+
+  const handlePrevMonth = () => {
+    if (pickerMonth === 0) {
+      setPickerMonth(11);
+      setPickerYear((y) => y - 1);
+    } else {
+      setPickerMonth((m) => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (pickerMonth === 11) {
+      setPickerMonth(0);
+      setPickerYear((y) => y + 1);
+    } else {
+      setPickerMonth((m) => m + 1);
+    }
+  };
+
+  const monthCalendarDays = useMemo(() => {
+    const firstDay = new Date(pickerYear, pickerMonth, 1);
+    const lastDay = new Date(pickerYear, pickerMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+
+    const startDayOfWeek = (firstDay.getDay() + 6) % 7;
+    const days: { day: number; dateStr: string; isCurrentMonth: boolean }[] = [];
+
+    const prevMonthLastDay = new Date(pickerYear, pickerMonth, 0).getDate();
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const d = prevMonthLastDay - i;
+      const prevDate = new Date(pickerYear, pickerMonth - 1, d);
+      days.push({ day: d, dateStr: toIsoDate(prevDate), isCurrentMonth: false });
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const currDate = new Date(pickerYear, pickerMonth, d);
+      days.push({ day: d, dateStr: toIsoDate(currDate), isCurrentMonth: true });
+    }
+
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let d = 1; d <= remaining; d++) {
+      const nextDate = new Date(pickerYear, pickerMonth + 1, d);
+      days.push({ day: d, dateStr: toIsoDate(nextDate), isCurrentMonth: false });
+    }
+
+    return days;
+  }, [pickerYear, pickerMonth]);
+
+  const getOrdersCountForDate = (dateStr: string) => {
+    return ordersList.filter((ord) => ord.date && ord.date.startsWith(dateStr)).length;
+  };
 
   // Завантаження замовлень з REST API (GET /api/orders)
   const fetchOrders = useCallback(async () => {
@@ -76,12 +163,11 @@ export default function CashierScreen() {
       if (activeTab === 'COMPLETED' && ord.status !== 'COMPLETED') return false;
       if (activeTab === 'CANCELLED' && ord.status !== 'CANCELLED') return false;
 
-      // Фільтр за виконавцем / касиром
-      if (
-        selectedExecutor !== 'ALL' &&
-        !ord.cashierName.toLowerCase().includes(selectedExecutor.toLowerCase())
-      ) {
-        return false;
+      // Фільтр за обраною датою
+      if (selectedDate !== 'ALL') {
+        if (!ord.date || !ord.date.startsWith(selectedDate)) {
+          return false;
+        }
       }
 
       // Пошук за номером, клієнтом або послугою
@@ -94,114 +180,37 @@ export default function CashierScreen() {
       }
       return true;
     });
-  }, [ordersList, activeTab, selectedExecutor, searchQuery]);
+  }, [ordersList, activeTab, selectedDate, searchQuery]);
 
   // Дії із замовленням (перевірка PUT методу)
+  const changeStatus = async (id: string, status: OrderItem['status']) => {
+    try {
+      await apiClient.updateOrderStatus(id, status);
+      await fetchOrders();
+    } catch (error) {
+      showAlert(language === 'pl' ? 'Błąd' : 'Помилка', error instanceof Error ? error.message : String(error));
+    }
+  };
   const handleOrderPress = (order: OrderItem) => {
-    Alert.alert(
+    const cleanCashier = (order.cashierName || 'Artem Hizhovskyi')
+      .replace(/\s*\([^)]*\)/g, '')
+      .replace('Артем Гіжовський', 'Artem Hizhovskyi')
+      .replace('Ігор Намачинський', 'Ihor Namachynskyi')
+      .replace('Артем Лабунський', 'Artem Labynskyi')
+      .trim();
+
+    showAlert(
       `${t.cashier.order} ${order.orderNumber}`,
-      `${language === 'pl' ? 'Status' : 'Статус'}: ${order.status === 'COMPLETED' ? t.cashier.completed : order.status === 'UNPAID' ? t.cashier.unpaid : t.cashier.cancelled}\n${t.booking.client}: ${order.clientName}\n${t.cashier.admin}: ${order.cashierName}\n${t.cashier.total}: ${order.totalAmount} ₴\n${t.booking.services}:\n• ${order.services.join('\n• ')}`,
+      `${language === 'pl' ? 'Status' : 'Статус'}: ${order.status === 'COMPLETED' ? t.cashier.completed : order.status === 'UNPAID' ? t.cashier.unpaid : t.cashier.cancelled}\n${t.booking.client}: ${order.clientName}\n${t.cashier.cashier}: ${cleanCashier}\n${t.cashier.total}: ${order.totalAmount} ₴\n${t.booking.services}:\n• ${order.services.join('\n• ')}`,
       [
         {
           text: t.cashier.markPaid,
-          onPress: async () => {
-            await apiClient.updateOrderStatus(order.id, 'COMPLETED');
-            fetchOrders();
-          },
+          onPress: () => changeStatus(order.id, 'COMPLETED'),
         },
         {
           text: t.cashier.cancelReceipt,
           style: 'destructive',
-          onPress: async () => {
-            await apiClient.updateOrderStatus(order.id, 'CANCELLED');
-            fetchOrders();
-          },
-        },
-        { text: t.common.cancel, style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleDateFilterPress = () => {
-    Alert.alert(
-      language === 'pl' ? 'Okres rozliczeniowy' : 'Період замовлень',
-      language === 'pl' ? 'Wybierz przedział czasowy' : 'Оберіть часовий проміжок для перегляду оплат',
-      [
-        {
-          text: language === 'pl' ? 'Dziś (10 paź 2026 r.)' : 'Сьогодні (10 жовт 2026 р.)',
-          onPress: () => setDateRange(language === 'pl' ? '10 paź 2026 r.' : '10 жовт 2026 р.'),
-        },
-        {
-          text: language === 'pl' ? 'Ostatni miesiąc' : 'Останній місяць',
-          onPress: () =>
-            setDateRange(
-              language === 'pl'
-                ? '10 wrz 2026 r. - 11 paź 2026 r.'
-                : '10 вер 2026 р. - 11 жовт 2026 р.'
-            ),
-        },
-        { text: t.common.cancel, style: 'cancel' },
-      ]
-    );
-  };
-
-  const handleExecutorFilterPress = async () => {
-    const masters = await apiClient.getMasters();
-    const options: { text: string; onPress?: () => void; style?: 'cancel' | 'destructive' | 'default' }[] = [
-      {
-        text: t.cashier.allExecutors,
-        onPress: () => setSelectedExecutor('ALL'),
-      },
-    ];
-
-    if (currentUser) {
-      options.push({
-        text: `${t.cashier.myOrders} (${currentRawName})`,
-        onPress: () => setSelectedExecutor(currentRawName),
-      });
-    }
-
-    masters.forEach((m) => {
-      if (m.name !== currentRawName) {
-        options.push({
-          text: m.name,
-          onPress: () => setSelectedExecutor(m.name),
-        });
-      }
-    });
-
-    options.push({ text: t.common.cancel, style: 'cancel' });
-
-    Alert.alert(
-      language === 'pl' ? 'Pracownicy' : 'Персонал',
-      language === 'pl' ? 'Filtruj paragony według pracownika' : 'Фільтрувати чеки за працівником',
-      options
-    );
-  };
-
-  const handleCreateOrder = () => {
-    Alert.alert(
-      language === 'pl' ? 'Nowe zamówienie' : 'Нове замовлення',
-      language === 'pl'
-        ? 'Utwórz szybki paragon lub przejdź do rezerwacji:'
-        : 'Бажаєте створити чек на касі чи перейти до детального бронювання?',
-      [
-        {
-          text: language === 'pl' ? 'Nowa rezerwacja' : 'Нове бронювання',
-          onPress: () => router.push('/(tabs)/new-booking'),
-        },
-        {
-          text: `${language === 'pl' ? 'Szybki paragon' : 'Швидкий чек'} (700 ₴)`,
-          onPress: async () => {
-            await apiClient.createOrder({
-              totalAmount: 700,
-              services: [language === 'pl' ? 'Kompleksowy manicure + hybryda' : 'Комплексний манікюр + покриття'],
-              clientName: language === 'pl' ? 'Klient salonu' : 'Гість салону',
-              cashierName: currentUserName,
-              status: 'COMPLETED',
-            });
-            fetchOrders();
-          },
+          onPress: () => changeStatus(order.id, 'CANCELLED'),
         },
         { text: t.common.cancel, style: 'cancel' },
       ]
@@ -230,7 +239,14 @@ export default function CashierScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'ALL' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'ALL' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('ALL')}
           activeOpacity={0.8}
@@ -249,7 +265,14 @@ export default function CashierScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'UNPAID' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'UNPAID' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('UNPAID')}
           activeOpacity={0.8}
@@ -268,7 +291,14 @@ export default function CashierScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'COMPLETED' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'COMPLETED' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('COMPLETED')}
           activeOpacity={0.8}
@@ -287,7 +317,14 @@ export default function CashierScreen() {
         <TouchableOpacity
           style={[
             styles.segmentTab,
-            activeTab === 'CANCELLED' && [styles.segmentTabActive, { backgroundColor: colors.surface }],
+            activeTab === 'CANCELLED' && [
+              styles.segmentTabActive,
+              {
+                backgroundColor: colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: colors.cardBorder,
+              },
+            ],
           ]}
           onPress={() => setActiveTab('CANCELLED')}
           activeOpacity={0.8}
@@ -304,57 +341,38 @@ export default function CashierScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 4. Фільтр дат та виконавців */}
+      {/* 4. Фільтр дат (Інтерактивний календар) */}
       <View style={styles.filterPillWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          <TouchableOpacity
+        <TouchableOpacity
+          style={[
+            styles.filterPill,
+            {
+              backgroundColor: selectedDate !== 'ALL' ? '#10B98120' : colors.surface,
+              borderColor: selectedDate !== 'ALL' ? '#10B981' : colors.cardBorder,
+            },
+          ]}
+          activeOpacity={0.75}
+          onPress={() => setIsDatePickerOpen(true)}
+        >
+          <MaterialCommunityIcons
+            name="calendar-month-outline"
+            size={18}
+            color={selectedDate !== 'ALL' ? '#10B981' : colors.textSecondary}
+          />
+          <Text
             style={[
-              styles.filterPill,
-              { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+              styles.filterPillText,
+              { color: selectedDate !== 'ALL' ? '#10B981' : colors.text },
             ]}
-            activeOpacity={0.75}
-            onPress={handleDateFilterPress}
           >
-            <MaterialCommunityIcons name="calendar-range" size={16} color={colors.textSecondary} />
-            <Text style={[styles.filterPillText, { color: colors.text }]}>{dateRange}</Text>
-            <MaterialCommunityIcons name="menu-down" size={18} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.filterPill,
-              {
-                backgroundColor: selectedExecutor !== 'ALL' ? '#10B98120' : colors.surface,
-                borderColor: selectedExecutor !== 'ALL' ? '#10B981' : colors.cardBorder,
-              },
-            ]}
-            activeOpacity={0.75}
-            onPress={handleExecutorFilterPress}
-          >
-            <MaterialCommunityIcons
-              name="account"
-              size={16}
-              color={selectedExecutor !== 'ALL' ? '#10B981' : colors.textSecondary}
-            />
-            <Text
-              style={[
-                styles.filterPillText,
-                { color: selectedExecutor !== 'ALL' ? '#10B981' : colors.text },
-              ]}
-            >
-              {selectedExecutor === 'ALL'
-                ? t.cashier.allExecutors
-                : selectedExecutor === currentRawName
-                ? `${t.cashier.myOrders} (${currentRawName})`
-                : selectedExecutor}
-            </Text>
-            <MaterialCommunityIcons
-              name="menu-down"
-              size={18}
-              color={selectedExecutor !== 'ALL' ? '#10B981' : colors.textSecondary}
-            />
-          </TouchableOpacity>
-        </ScrollView>
+            {formatPillDate(selectedDate)} ({filteredOrders.length})
+          </Text>
+          <MaterialCommunityIcons
+            name="menu-down"
+            size={18}
+            color={selectedDate !== 'ALL' ? '#10B981' : colors.textSecondary}
+          />
+        </TouchableOpacity>
       </View>
 
       {/* 6. Пошук */}
@@ -419,17 +437,129 @@ export default function CashierScreen() {
         )}
       </ScrollView>
 
-      {/* 8. Плаваюча кнопка "+ Створити чек" (FAB) */}
-      <TouchableOpacity
-        style={styles.fabButton}
-        activeOpacity={0.85}
-        onPress={handleCreateOrder}
+      {/* Модальне вікно вибору дати (Інтерактивний календар) */}
+      <Modal
+        visible={isDatePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDatePickerOpen(false)}
       >
-        <MaterialCommunityIcons name="receipt-text-plus" size={20} color="#FFFFFF" />
-        <Text style={styles.fabText}>
-          {language === 'pl' ? 'Nowy paragon' : 'Новий чек'}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsDatePickerOpen(false)}
+        >
+          <View
+            style={[
+              styles.datePickerModal,
+              { backgroundColor: colors.surface, borderColor: colors.cardBorder },
+            ]}
+          >
+            {/* Шапка календаря: перемикач місяців */}
+            <View style={styles.calendarHeaderRow}>
+              <TouchableOpacity
+                onPress={handlePrevMonth}
+                style={[styles.calArrowBtn, { backgroundColor: colors.surfaceLight }]}
+              >
+                <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={[styles.calMonthTitle, { color: colors.text }]}>
+                {pickerMonthLabel}
+              </Text>
+              <TouchableOpacity
+                onPress={handleNextMonth}
+                style={[styles.calArrowBtn, { backgroundColor: colors.surfaceLight }]}
+              >
+                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Дні тижня (Пн-Нд) */}
+            <View style={styles.calWeekdaysRow}>
+              {(language === 'pl' ? WEEKDAYS_SHORT_PL : WEEKDAYS_SHORT_UA).map((wd, i) => (
+                <Text key={i} style={[styles.calWeekdayText, { color: colors.textSecondary }]}>
+                  {wd}
+                </Text>
+              ))}
+            </View>
+
+            {/* Сітка днів місяця */}
+            <View style={styles.calDaysGrid}>
+              {monthCalendarDays.map((item, index) => {
+                const isSelected = selectedDate === item.dateStr;
+                const count = getOrdersCountForDate(item.dateStr);
+
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.calDayCell,
+                      isSelected && styles.calDayCellSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedDate(item.dateStr);
+                      setIsDatePickerOpen(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.calDayNum,
+                        {
+                          color: isSelected
+                            ? '#FFFFFF'
+                            : item.isCurrentMonth
+                            ? colors.text
+                            : colors.textSecondary + '66',
+                        },
+                        isSelected && { fontWeight: '700' },
+                      ]}
+                    >
+                      {item.day}
+                    </Text>
+                    {count > 0 && (
+                      <View
+                        style={[
+                          styles.calDotBadge,
+                          isSelected && { backgroundColor: '#FFFFFF' },
+                        ]}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Кнопка "Всі дати" */}
+            <View style={styles.calBottomActions}>
+              <TouchableOpacity
+                style={[
+                  styles.allDatesBtn,
+                  selectedDate === 'ALL' && styles.allDatesBtnActive,
+                ]}
+                onPress={() => {
+                  setSelectedDate('ALL');
+                  setIsDatePickerOpen(false);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="calendar-multiselect"
+                  size={18}
+                  color={selectedDate === 'ALL' ? '#FFFFFF' : '#10B981'}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.allDatesText,
+                    selectedDate === 'ALL' && { color: '#FFFFFF' },
+                  ]}
+                >
+                  {language === 'pl' ? 'Wszystkie daty (cała lista)' : 'Всі дати (повний список)'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -485,7 +615,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   segmentTextActive: {
-    color: '#FFFFFF',
     fontWeight: '700',
   },
   filterPillWrapper: {
@@ -572,26 +701,99 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  fabButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 16,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  datePickerModal: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+  },
+  calendarHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#4CAF50',
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    gap: 8,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  fabText: {
-    color: '#FFFFFF',
-    fontSize: 14.5,
+  calArrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calMonthTitle: {
+    fontSize: 16,
     fontWeight: '700',
+  },
+  calWeekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 8,
+  },
+  calWeekdayText: {
+    width: 38,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+  },
+  calDayCell: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    marginVertical: 2,
+    position: 'relative',
+  },
+  calDayCellSelected: {
+    backgroundColor: '#10B981',
+  },
+  calDayNum: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  calDotBadge: {
+    position: 'absolute',
+    bottom: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#10B981',
+  },
+  calBottomActions: {
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#28282C',
+    paddingTop: 12,
+  },
+  allDatesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B98118',
+    borderWidth: 1,
+    borderColor: '#10B98166',
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  allDatesBtnActive: {
+    backgroundColor: '#10B981',
+  },
+  allDatesText: {
+    color: '#10B981',
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

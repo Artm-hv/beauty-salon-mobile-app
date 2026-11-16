@@ -1,3 +1,4 @@
+import { useAlert } from '../../context/AlertContext';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -6,17 +7,15 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { Text, Snackbar } from 'react-native-paper';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { MOCK_MASTERS, Master, ClientItem, AppointmentItem } from '../../services/mockData';
+import { Master, ClientItem, AppointmentItem } from '../../services/mockData';
 import { apiClient } from '../../services/api';
 import { useAppSettings } from '../../context/AppSettingsContext';
-import { authService } from '../../services/authService';
 
 // Каталог послуг салону "Svoya Nail Studio"
 const AVAILABLE_SERVICES_PL = [
@@ -73,9 +72,23 @@ const formatDisplayDate = (dateStr: string, lang: 'pl' | 'ua'): string => {
   }
 };
 
-// Доступні робочі години салону для запису
+// Допоміжна функція для парсингу тривалості послуги в хвилини
+export const parseServiceDurationMinutes = (durationStr?: string): number => {
+  if (!durationStr) return 90;
+  let total = 0;
+  const hoursMatch = durationStr.match(/(\d+)\s*(?:godz|год|h)/i);
+  if (hoursMatch) {
+    total += parseInt(hoursMatch[1], 10) * 60;
+  }
+  const minMatch = durationStr.match(/(\d+)\s*(?:min|хв|m)/i);
+  if (minMatch) {
+    total += parseInt(minMatch[1], 10);
+  }
+  return total > 0 ? total : 90;
+};
+
+// Доступні робочі години салону для запису (початок від 10:00)
 const AVAILABLE_TIME_SLOTS = [
-  '09:00',
   '10:00',
   '11:00',
   '12:00',
@@ -108,24 +121,21 @@ const WEEKDAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
  * Підключено збереження до REST API (POST /api/bookings, POST /api/clients)
  */
 export default function NewBookingScreen() {
+  const showAlert = useAlert();
   const router = useRouter();
   const { colors, t, language } = useAppSettings();
-  const currentUser = authService.getCurrentUser();
-  const currentUserName = currentUser
-    ? (currentUser.name || `${currentUser.firstName} ${currentUser.lastName}`.trim())
-    : '';
-  const params = useLocalSearchParams<{ clientId?: string; masterId?: string }>();
+  const params = useLocalSearchParams<{ clientId?: string; masterId?: string; date?: string }>();
 
   const availableServices = language === 'pl' ? AVAILABLE_SERVICES_PL : AVAILABLE_SERVICES_UA;
   const orderSourcesList = language === 'pl' ? ORDER_SOURCES_PL : ORDER_SOURCES_UA;
 
   // Стан вибору майстра (за замовчуванням: null / "Не обрано")
-  const [mastersList, setMastersList] = useState<Master[]>(MOCK_MASTERS);
+  const [mastersList, setMastersList] = useState<Master[]>([]);
   const [selectedMaster, setSelectedMaster] = useState<Master | null>(null);
 
   // Стан розкладу та бронювання часу (дата динамічно встановлюється на сьогоднішній день)
   const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
-  const [bookingDate, setBookingDate] = useState(getTodayIsoDate());
+  const [bookingDate, setBookingDate] = useState(params.date || getTodayIsoDate());
   const [bookingTime, setBookingTime] = useState('12:00');
 
   // Календар у модальному вікні та пошук клієнта
@@ -152,7 +162,6 @@ export default function NewBookingScreen() {
   const [newClientName, setNewClientName] = useState('');
   const [newClientPhone, setNewClientPhone] = useState('');
 
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Функція завантаження майстрів, клієнтів та розкладу з REST API (GET)
@@ -163,8 +172,9 @@ export default function NewBookingScreen() {
         apiClient.getClients(),
         apiClient.getAppointments(),
       ]);
-      const currentMasters = masters && masters.length > 0 ? masters : MOCK_MASTERS;
+      const currentMasters = masters.filter(master => master.active);
       setMastersList(currentMasters);
+      setSelectedMaster(previous => currentMasters.find(m => m.id === previous?.id) ?? null);
       setClientsList(clients);
       if (appointments) setAppointmentsList(appointments);
 
@@ -176,20 +186,19 @@ export default function NewBookingScreen() {
         }
       }
 
-      // Якщо передано masterId, або поточний користувач є MASTER - авто-вибираємо його
+      // Відкрити запис для майстра, вибраного в календарі.
       if (params.masterId) {
         const found = currentMasters.find((m) => m.id === params.masterId);
         if (found) setSelectedMaster(found);
-      } else if (currentUser?.role === 'MASTER' && !selectedMaster && currentUserName) {
-        const found = currentMasters.find(
-          (m) =>
-            m.name.toLowerCase().includes(currentUserName.toLowerCase()) ||
-            currentUserName.toLowerCase().includes(m.name.toLowerCase())
-        );
-        if (found) setSelectedMaster(found);
       }
     } catch {}
-  }, [params.clientId, params.masterId, currentUserName, currentUser?.role, selectedMaster]);
+  }, [params.clientId, params.masterId]);
+
+  useFocusEffect(useCallback(() => {
+    if (params.date) setBookingDate(params.date);
+  }, [params.date, params.masterId]));
+
+  const durationMinutes = selectedServices.reduce((sum, s) => sum + parseServiceDurationMinutes(s.duration), 0);
 
   // Перевірка зайнятості часового слоту у розкладі обраного майстра
   const getSlotConflict = (
@@ -198,7 +207,7 @@ export default function NewBookingScreen() {
     date: string
   ): AppointmentItem | undefined => {
     return appointmentsList.find((app) => {
-      if (app.masterId !== masterId) return false;
+      if (app.status === 'CANCELLED' || app.masterId !== masterId) return false;
       if (app.date !== date) return false;
 
       const [appStartH, appStartM] = (app.startTime || '00:00').split(':').map(Number);
@@ -209,7 +218,7 @@ export default function NewBookingScreen() {
       const appEndMinutes = appEndH * 60 + (appEndM || 0);
       const slotMinutes = slotH * 60 + (slotM || 0);
 
-      return slotMinutes >= appStartMinutes && slotMinutes < appEndMinutes;
+      return slotMinutes + Math.max(durationMinutes, 1) > appStartMinutes && slotMinutes < appEndMinutes;
     });
   };
 
@@ -268,9 +277,6 @@ export default function NewBookingScreen() {
     }, [loadData])
   );
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
 
   // Підрахунок суми
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
@@ -291,7 +297,7 @@ export default function NewBookingScreen() {
 
   const handleCreateNewClient = async () => {
     if (!newClientName.trim()) {
-      Alert.alert(
+      showAlert(
         language === 'pl' ? 'Błąd' : 'Помилка',
         language === 'pl' ? 'Wpisz imię klienta' : "Введіть ім'я клієнта"
       );
@@ -312,7 +318,7 @@ export default function NewBookingScreen() {
       setNewClientName('');
       setNewClientPhone('');
     } catch {
-      Alert.alert(
+      showAlert(
         language === 'pl' ? 'Błąd' : 'Помилка',
         language === 'pl' ? 'Nie udało się zapisać klienta' : 'Не вдалося зберегти клієнта'
       );
@@ -322,7 +328,7 @@ export default function NewBookingScreen() {
   // Збереження бронювання через REST API (POST /api/bookings)
   const handleSave = async () => {
     if (!selectedMaster) {
-      Alert.alert(
+      showAlert(
         t.booking.selectMaster,
         language === 'pl'
           ? 'Proszę wybrać pracownika przed zapisaniem rezerwacji'
@@ -331,9 +337,13 @@ export default function NewBookingScreen() {
       return;
     }
 
+    if (!selectedServices.length) {
+      showAlert(language === 'pl' ? 'Wybierz usługę' : 'Оберіть послугу');
+      return;
+    }
     const conflict = getSlotConflict(bookingTime, selectedMaster.id, bookingDate);
     if (conflict) {
-      Alert.alert(
+      showAlert(
         t.booking.slotConflict,
         language === 'pl'
           ? `U pracownika ${selectedMaster.name} o ${bookingTime} jest już zaplanowana wizyta:\n"${conflict.serviceName}" (${conflict.clientName}).\n\nProszę wybrać inną wolną godzinę.`
@@ -344,44 +354,46 @@ export default function NewBookingScreen() {
 
     setIsSaving(true);
     try {
-      const defaultService =
-        language === 'pl'
-          ? 'Kompleksowy manicure + hybryda'
-          : 'Комплексний манікюр + покриття';
-      const serviceTitle =
-        selectedServices.length > 0
-          ? selectedServices.map((s) => s.name).join(', ')
-          : defaultService;
-      const price = totalPrice > 0 ? totalPrice : 700;
-
-      // Обчислення кінцевого часу (додаємо 1.5 години)
       const [h, m] = bookingTime.split(':').map(Number);
-      const endH = Math.min(21, h + 1);
-      const endM = (m + 30) % 60;
-      const formattedEndTime = `${String(endH + (m + 30 >= 60 ? 1 : 0)).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      const startMinutes = h * 60 + m;
+      const endTotalMinutes = startMinutes + durationMinutes;
+      if (endTotalMinutes > 21 * 60) {
+        showAlert(language === 'pl' ? 'Wizyta kończy się po zamknięciu' : 'Візит закінчується після закриття салону');
+        return;
+      }
+      const endH = Math.floor(endTotalMinutes / 60);
+      const endM = endTotalMinutes % 60;
+      const formattedEndTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 
       await apiClient.createBooking({
         masterId: selectedMaster.id,
+        clientId: selectedClient ? selectedClient.id : undefined,
         clientName: selectedClient ? selectedClient.name : t.booking.anonymousClient,
         clientPhone: selectedClient ? selectedClient.phone : '+380 67 000 0000',
-        serviceName: serviceTitle,
+        serviceName: selectedServices.map(s => s.name).join(', '),
+        services: selectedServices.map(s => s.name),
         date: bookingDate,
         startTime: bookingTime,
         endTime: formattedEndTime,
-        price: price,
+        price: totalPrice,
         notes: comment,
-        colorType: 'green',
+        colorType: 'mustard',
         source: orderSource,
       });
 
-      setSnackbarVisible(true);
-      setTimeout(() => {
-        router.push('/(tabs)/calendar');
-      }, 1000);
-    } catch {
-      Alert.alert(
+      setSelectedServices([]);
+      setSelectedClient(null);
+      setComment('');
+      router.replace('/(tabs)/calendar');
+    } catch (error) {
+      void loadData();
+      showAlert(
         language === 'pl' ? 'Błąd' : 'Помилка',
-        language === 'pl' ? 'Nie udało się zapisać rezerwacji' : 'Не вдалося зберегти запис'
+        error instanceof Error
+          ? error.message
+          : language === 'pl'
+          ? 'Nie udało się zapisać wizyty'
+          : 'Не вдалося зберегти запис'
       );
     } finally {
       setIsSaving(false);
@@ -582,7 +594,7 @@ export default function NewBookingScreen() {
           style={styles.saveButton}
           activeOpacity={0.85}
           onPress={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !selectedServices.length}
         >
           {isSaving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -648,9 +660,25 @@ export default function NewBookingScreen() {
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>{t.booking.selectClient}</Text>
-              <TouchableOpacity onPress={() => setIsClientModalOpen(false)}>
-                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setIsClientModalOpen(false);
+                    setNewClientName('');
+                    setNewClientPhone('');
+                    setIsCreateClientOpen(true);
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <MaterialCommunityIcons name="account-plus" size={18} color="#10B981" />
+                  <Text style={{ color: '#10B981', fontWeight: '700', fontSize: 13 }}>
+                    {language === 'pl' ? 'Nowy' : 'Новий'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsClientModalOpen(false)}>
+                  <MaterialCommunityIcons name="close" size={22} color={colors.text} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Рядок пошуку клієнта */}
@@ -753,7 +781,13 @@ export default function NewBookingScreen() {
               <Text style={[styles.modalTitle, { color: colors.text }]}>
                 {language === 'pl' ? 'Dodaj nowego klienta' : 'Створити нового клієнта'}
               </Text>
-              <TouchableOpacity onPress={() => setIsCreateClientOpen(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setIsCreateClientOpen(false);
+                  setNewClientName('');
+                  setNewClientPhone('');
+                }}
+              >
                 <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
@@ -1031,7 +1065,7 @@ export default function NewBookingScreen() {
                       activeOpacity={isOccupied ? 0.9 : 0.75}
                       onPress={() => {
                         if (isOccupied) {
-                          Alert.alert(
+                          showAlert(
                             t.booking.slotConflict,
                             language === 'pl'
                               ? `U pracownika ${selectedMaster?.name} o ${slot} (${formatDisplayDate(bookingDate, language)}) jest już wizyta: "${conflict?.serviceName}" (${conflict?.clientName}).\n\nProszę wybrać inną godzinę.`
@@ -1083,18 +1117,7 @@ export default function NewBookingScreen() {
         </View>
       </Modal>
 
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={1500}
-        style={{ backgroundColor: '#133E1D' }}
-      >
-        <Text style={{ color: '#34D399', fontWeight: 'bold' }}>
-          {language === 'pl'
-            ? '✓ Rezerwacja została pomyślnie dodana!'
-            : '✓ Запис успішно збережено в розклад!'}
-        </Text>
-      </Snackbar>
+
     </View>
   );
 }

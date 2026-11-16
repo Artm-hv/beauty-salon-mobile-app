@@ -29,13 +29,15 @@ export function useCamera() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.65,
+        base64: true,
       });
 
       setIsLoading(false);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
+        if (!result.assets[0].base64) throw new Error('Фото недоступне');
+        const uri = 'data:image/jpeg;base64,' + result.assets[0].base64;
         setPhotoUri(uri);
         return uri;
       }
@@ -54,13 +56,15 @@ export function useCamera() {
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.65,
+        base64: true,
       });
 
       setIsLoading(false);
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const uri = result.assets[0].uri;
+        if (!result.assets[0].base64) throw new Error('Фото недоступне');
+        const uri = 'data:image/jpeg;base64,' + result.assets[0].base64;
         setPhotoUri(uri);
         return uri;
       }
