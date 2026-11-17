@@ -5,7 +5,7 @@ import {
   OrderItem,
   ClientItem,
   Master,
-} from './mockData';
+} from '../constants/salonTypes';
 import { User, UserRole } from '../constants/types';
 
 /**

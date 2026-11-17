@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 title Svoya Nail Studio - Serwer Deweloperski (Expo Metro)
-cd /d "%~dp0"
+cd /d "%~dp0application" || exit /b 1
 
 cls
 echo ================================================================
@@ -13,7 +13,7 @@ echo.
 if not exist "node_modules\" (
     echo [!] Brak folderu node_modules. Instalowanie zaleznosci...
     call npm install --legacy-peer-deps
-    if %errorlevel% neq 0 (
+    if errorlevel 1 (
         echo [X] Blad podczas instalacji zaleznosci.
         pause
         exit /b
@@ -52,7 +52,7 @@ echo [UWAGA] Jesli jestes na eduroam, wlacz Hotspot w Windows lub uzyj opcji [2]
 echo ================================================================
 echo.
 call npx expo start --lan -c
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [X] Wystapil blad podczas uruchamiania Expo.
     pause
@@ -68,7 +68,7 @@ echo [WSKAZOWKA] Omija blokady eduroam i uczelniane zapory sieciowe!
 echo ================================================================
 echo.
 call npx expo start --tunnel -c
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [X] Wystapil blad podczas uruchamiania trybu Tunel.
     pause
@@ -83,7 +83,7 @@ echo [INFO] Uruchamianie aplikacji w przegladarce internetowej...
 echo ================================================================
 echo.
 call npm run web
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo [X] Wystapil blad podczas uruchamiania wersji Web.
     pause

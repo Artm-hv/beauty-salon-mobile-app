@@ -15,7 +15,7 @@ import { MonthlyBarChart, DayStat } from '../components/MonthlyBarChart';
 import { DonutChart } from '../components/DonutChart';
 import { apiClient } from '../services/api';
 import { authService } from '../services/authService';
-import { AppointmentItem } from '../services/mockData';
+import { AppointmentItem } from '../constants/salonTypes';
 
 // 5 реальних джерел бронювань, доступних у формі запису
 const getBookingSourcesLegend = (lang: string) => [

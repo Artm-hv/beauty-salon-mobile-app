@@ -19,7 +19,7 @@ import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { ClientCard } from '../../components/ClientCard';
-import { ClientItem } from '../../services/mockData';
+import { ClientItem } from '../../constants/salonTypes';
 import { apiClient } from '../../services/api';
 import { useAppSettings } from '../../context/AppSettingsContext';
 

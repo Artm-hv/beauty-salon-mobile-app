@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useAppSettings } from '../context/AppSettingsContext';
 import { authService, useCurrentUser } from '../services/authService';
 import { apiClient } from '../services/api';
-import { AppointmentItem, Master } from '../services/mockData';
+import { AppointmentItem, Master } from '../constants/salonTypes';
 
 interface SalaryTransaction {
   id: string;

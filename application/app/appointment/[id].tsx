@@ -5,7 +5,7 @@ import { Button, Text, TextInput } from 'react-native-paper';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiClient } from '../../services/api';
-import { AppointmentItem, Master } from '../../services/mockData';
+import { AppointmentItem, Master } from '../../constants/salonTypes';
 import { useCurrentUser } from '../../services/authService';
 import { useAppSettings } from '../../context/AppSettingsContext';
 import { useCamera } from '../../hooks/useCamera';

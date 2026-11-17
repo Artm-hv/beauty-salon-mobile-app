@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { AppointmentItem } from '../services/mockData';
+import { AppointmentItem } from '../constants/salonTypes';
 import { Colors } from '../constants/colors';
 
 interface AppointmentCardProps {

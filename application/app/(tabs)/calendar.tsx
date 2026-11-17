@@ -26,7 +26,7 @@ import { AppointmentCard } from '../../components/AppointmentCard';
 import {
   AppointmentItem,
   Master,
-} from '../../services/mockData';
+} from '../../constants/salonTypes';
 import { apiClient } from '../../services/api';
 import { useAccelerometer } from '../../hooks/useAccelerometer';
 import { useAppSettings } from '../../context/AppSettingsContext';

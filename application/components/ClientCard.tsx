@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ClientItem } from '../services/mockData';
+import { ClientItem } from '../constants/salonTypes';
 import { useAppSettings } from '../context/AppSettingsContext';
 
 interface ClientCardProps {

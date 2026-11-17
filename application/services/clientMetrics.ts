@@ -1,4 +1,4 @@
-import type { AppointmentItem, ClientItem, OrderItem } from './mockData';
+import type { AppointmentItem, ClientItem, OrderItem } from '../constants/salonTypes';
 
 type CustomerReference = Pick<AppointmentItem, 'clientId' | 'clientName' | 'clientPhone'>;
 

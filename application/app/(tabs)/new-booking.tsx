@@ -13,7 +13,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Master, ClientItem, AppointmentItem } from '../../services/mockData';
+import { Master, ClientItem, AppointmentItem } from '../../constants/salonTypes';
 import { apiClient } from '../../services/api';
 import { useAppSettings } from '../../context/AppSettingsContext';
 
